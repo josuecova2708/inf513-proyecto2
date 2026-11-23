@@ -1,0 +1,301 @@
+@import 'tailwindcss';
+
+@source '../views';
+@source '../js';
+
+/* =============================================================================
+   FEDER · Identidad visual unificada
+   Los colores son variables CSS (--c-*) que cambian según los atributos de <html>:
+     data-tema      = ninos | jovenes | adultos   (segmento de usuario)
+     data-modo      = dia | noche                 (manual o automático por horario)
+     data-contraste = normal | alto               (accesibilidad WCAG)
+     --tamano-base  = tamaño de fuente raíz       (accesibilidad, slider 14-22px)
+   Tailwind expone esas variables como utilidades: bg-primario, text-texto, etc.
+   ============================================================================= */
+
+@theme inline {
+    --color-fondo: var(--c-fondo);
+    --color-superficie: var(--c-superficie);
+    --color-superficie-2: var(--c-superficie-2);
+    --color-texto: var(--c-texto);
+    --color-suave: var(--c-suave);
+    --color-borde: var(--c-borde);
+    --color-primario: var(--c-primario);
+    --color-primario-hover: var(--c-primario-hover);
+    --color-sobre-primario: var(--c-sobre-primario);
+    --color-secundario: var(--c-secundario);
+    --color-acento: var(--c-acento);
+    --color-exito: var(--c-exito);
+    --color-aviso: var(--c-aviso);
+    --color-peligro: var(--c-peligro);
+    --color-info: var(--c-info);
+    --radius-tema: var(--radio);
+    --font-tema: var(--fuente);
+    --font-titulo: var(--fuente-titulo);
+}
+
+/* ---------- ADULTOS (por defecto): sobrio, verdes de campo y tierra ---------- */
+:root {
+    --tamano-base: 16px;
+    --radio: 0.5rem;
+    --fuente: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --fuente-titulo: Georgia, 'Times New Roman', serif;
+
+    --c-fondo: #f5f3ec;
+    --c-superficie: #ffffff;
+    --c-superficie-2: #ece8dc;
+    --c-texto: #1d2a21;
+    --c-suave: #56635a;
+    --c-borde: #d6d1c2;
+    --c-primario: #2f6b3f;
+    --c-primario-hover: #255633;
+    --c-sobre-primario: #ffffff;
+    --c-secundario: #8a5a2b;
+    --c-acento: #c98a1c;
+    --c-exito: #1f7a3a;
+    --c-aviso: #a35f00;
+    --c-peligro: #b42318;
+    --c-info: #1d5fa8;
+    color-scheme: light;
+}
+
+[data-modo='noche'] {
+    --c-fondo: #121813;
+    --c-superficie: #1a221c;
+    --c-superficie-2: #243026;
+    --c-texto: #e7ece6;
+    --c-suave: #a7b3a9;
+    --c-borde: #344236;
+    --c-primario: #6fbf7f;
+    --c-primario-hover: #8fd29c;
+    --c-sobre-primario: #0d1a10;
+    --c-secundario: #d6a56f;
+    --c-acento: #e8b44c;
+    --c-exito: #6fcf8a;
+    --c-aviso: #f0b45a;
+    --c-peligro: #ff8a80;
+    --c-info: #8ab8f0;
+    color-scheme: dark;
+}
+
+/* ---------- JÓVENES: moderno, turquesa y lima, esquinas suaves ---------- */
+[data-tema='jovenes'] {
+    --radio: 0.9rem;
+    --fuente: 'Segoe UI', ui-sans-serif, system-ui, Roboto, Arial, sans-serif;
+    --fuente-titulo: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+    --c-fondo: #f0faf8;
+    --c-superficie: #ffffff;
+    --c-superficie-2: #dcf3ee;
+    --c-texto: #0f2a2a;
+    --c-suave: #4b6666;
+    --c-borde: #bfe3dc;
+    --c-primario: #0f766e;
+    --c-primario-hover: #0b5c56;
+    --c-sobre-primario: #ffffff;
+    --c-secundario: #6d28d9;
+    --c-acento: #65a30d;
+    --c-info: #0369a1;
+}
+[data-tema='jovenes'][data-modo='noche'] {
+    --c-fondo: #0b1416;
+    --c-superficie: #111d20;
+    --c-superficie-2: #18292d;
+    --c-texto: #e2f4f1;
+    --c-suave: #9bbcb7;
+    --c-borde: #23393d;
+    --c-primario: #2dd4bf;
+    --c-primario-hover: #5eead4;
+    --c-sobre-primario: #04201d;
+    --c-secundario: #a78bfa;
+    --c-acento: #a3e635;
+    --c-info: #7dd3fc;
+}
+
+/* ---------- NIÑOS: alegre, colores vivos, bordes muy redondeados y letra más grande ---------- */
+[data-tema='ninos'] {
+    --radio: 1.4rem;
+    --fuente: 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS', ui-rounded, system-ui, sans-serif;
+    --fuente-titulo: 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS', ui-rounded, sans-serif;
+    --c-fondo: #fff8e1;
+    --c-superficie: #ffffff;
+    --c-superficie-2: #ffefc2;
+    --c-texto: #2b2140;
+    --c-suave: #5e5470;
+    --c-borde: #f5d77a;
+    --c-primario: #1f8f3a;
+    --c-primario-hover: #177230;
+    --c-sobre-primario: #ffffff;
+    --c-secundario: #d9480f;
+    --c-acento: #2563eb;
+    --c-info: #2563eb;
+}
+[data-tema='ninos'] body {
+    font-size: 1.06rem;
+}
+[data-tema='ninos'][data-modo='noche'] {
+    --c-fondo: #1b1530;
+    --c-superficie: #251d40;
+    --c-superficie-2: #31285a;
+    --c-texto: #fdf6e3;
+    --c-suave: #cfc4e8;
+    --c-borde: #4a3f7a;
+    --c-primario: #7ee08f;
+    --c-primario-hover: #a2eeae;
+    --c-sobre-primario: #102814;
+    --c-secundario: #ffa94d;
+    --c-acento: #74b0ff;
+    --c-info: #74b0ff;
+}
+
+/* ---------- ALTO CONTRASTE (accesibilidad): anula el tema, relación > 7:1 ---------- */
+[data-contraste='alto'] {
+    --c-fondo: #ffffff;
+    --c-superficie: #ffffff;
+    --c-superficie-2: #f0f0f0;
+    --c-texto: #000000;
+    --c-suave: #1a1a1a;
+    --c-borde: #000000;
+    --c-primario: #003d14;
+    --c-primario-hover: #000000;
+    --c-sobre-primario: #ffffff;
+    --c-secundario: #4a2600;
+    --c-acento: #00307a;
+    --c-exito: #004d1a;
+    --c-aviso: #5c3300;
+    --c-peligro: #8a0000;
+    --c-info: #00307a;
+}
+[data-contraste='alto'][data-modo='noche'] {
+    --c-fondo: #000000;
+    --c-superficie: #000000;
+    --c-superficie-2: #141414;
+    --c-texto: #ffffff;
+    --c-suave: #f0f0f0;
+    --c-borde: #ffffff;
+    --c-primario: #ffe500;
+    --c-primario-hover: #ffffff;
+    --c-sobre-primario: #000000;
+    --c-secundario: #ffb366;
+    --c-acento: #66d9ff;
+    --c-exito: #7dff9e;
+    --c-aviso: #ffd166;
+    --c-peligro: #ff8c8c;
+    --c-info: #66d9ff;
+}
+[data-contraste='alto'] a {
+    text-decoration: underline;
+}
+[data-contraste='alto'] a:has(img, [role='img']) {
+    text-decoration: none;
+}
+[data-contraste='alto'] .tarjeta,
+[data-contraste='alto'] .campo {
+    border-width: 2px;
+}
+
+/* ---------- Series de gráficos (paleta categórica validada, orden fijo) ---------- */
+:root {
+    --serie-1: #2a78d6;
+    --serie-2: #eb6834;
+    --serie-3: #1baf7a;
+    --serie-4: #eda100;
+    --serie-5: #e87ba4;
+    --serie-6: #008300;
+    --estado-bueno: #0ca30c;
+    --estado-critico: #d03b3b;
+}
+[data-modo='noche'] {
+    --serie-1: #3987e5;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --serie-4: #c98500;
+    --serie-5: #d55181;
+    --serie-6: #0ca30c;
+}
+
+/* ---------- Base ---------- */
+html {
+    font-size: var(--tamano-base);
+}
+body {
+    background: var(--c-fondo);
+    color: var(--c-texto);
+    font-family: var(--fuente);
+    transition: background-color 0.2s, color 0.2s;
+}
+h1, h2, h3 {
+    font-family: var(--fuente-titulo);
+}
+:focus-visible {
+    outline: 3px solid var(--c-acento);
+    outline-offset: 2px;
+}
+[data-contraste='alto'] :focus-visible {
+    outline: 4px solid var(--c-primario);
+}
+.enlace-saltar {
+    position: absolute;
+    left: -999px;
+    top: 0.5rem;
+    z-index: 100;
+}
+.enlace-saltar:focus {
+    left: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* ---------- Componentes reutilizables (utilidades propias de Tailwind 4) ---------- */
+@utility tarjeta {
+    @apply bg-superficie border border-borde rounded-tema shadow-sm;
+}
+@utility campo {
+    @apply w-full bg-superficie text-texto border border-borde rounded-tema px-3 py-2 placeholder:text-suave focus:border-primario focus:outline-none focus:ring-2 focus:ring-primario/30;
+}
+@utility campo-error {
+    @apply border-peligro focus:border-peligro focus:ring-peligro/30;
+}
+@utility etiqueta {
+    @apply block text-sm font-medium mb-1;
+}
+@utility btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-tema px-4 py-2 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
+}
+@utility btn-primario {
+    @apply btn bg-primario text-sobre-primario hover:bg-primario-hover;
+}
+@utility btn-secundario {
+    @apply btn bg-superficie-2 text-texto border border-borde hover:border-primario;
+}
+@utility btn-peligro {
+    @apply btn bg-peligro text-white hover:opacity-90;
+}
+@utility btn-fantasma {
+    @apply btn text-texto hover:bg-superficie-2;
+}
+@utility btn-sm {
+    @apply px-2.5 py-1 text-sm;
+}
+@utility insignia {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap;
+}
+@utility tabla {
+    @apply w-full text-sm;
+}
+
+@layer components {
+    .tabla th {
+        @apply text-left font-semibold text-suave px-3 py-2 border-b border-borde bg-superficie-2 whitespace-nowrap;
+    }
+    .tabla td {
+        @apply px-3 py-2 border-b border-borde align-middle;
+    }
+    .tabla tbody tr:hover {
+        @apply bg-superficie-2/60;
+    }
+}

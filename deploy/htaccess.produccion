@@ -1,0 +1,29 @@
+# .htaccess de producción para https://www.tecnoweb.org.bo/inf513/grupo28sa/proyecto2
+# El script deploy/desplegar.sh lo copia a public/.htaccess en el servidor.
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+    RewriteBase /inf513/grupo28sa/proyecto2/
+
+    # Cabecera Authorization (tokens Bearer de Sanctum)
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # La raíz (/proyecto2/) va directo a index.php (evita el 405 en la raíz)
+    RewriteRule ^$ index.php [L]
+
+    # Quitar barra final si no es carpeta
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Todo lo demás al front controller de Laravel (la SPA de React y la API /api)
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
