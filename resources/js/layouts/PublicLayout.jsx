@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { LogIn, ShoppingCart, Sprout } from 'lucide-react';
+import { LogIn, ShoppingCart } from 'lucide-react';
+import { IMG_URL } from '../api/cliente';
 import BuscadorGlobal from '../componentes/BuscadorGlobal';
 import PanelAccesibilidad from '../componentes/PanelAccesibilidad';
 import CampanaNotificaciones from '../componentes/CampanaNotificaciones';
@@ -11,8 +12,9 @@ import { useCarrito } from '../contextos/CarritoContext';
 export function Logo() {
     return (
         <Link to="/" className="flex shrink-0 items-center gap-2" aria-label="FEDER, ir al inicio">
-            <span className="flex size-10 items-center justify-center rounded-tema bg-primario text-sobre-primario">
-                <Sprout className="size-6" aria-hidden="true" />
+            {/* Fondo blanco fijo: el ícono oficial (barras y engranaje gris) se ve igual en día, noche y alto contraste */}
+            <span className="flex size-11 items-center justify-center rounded-tema border border-borde bg-white p-1 shadow-sm">
+                <img src={`${IMG_URL}/feder-icono.png`} alt="" className="size-full object-contain" />
             </span>
             <span className="leading-tight">
                 <span className="block font-titulo text-xl font-bold">FEDER</span>
@@ -22,7 +24,16 @@ export function Logo() {
     );
 }
 
-const enlace = ({ isActive }) => `rounded-tema px-3 py-2 text-sm font-medium ${isActive ? 'bg-primario/10 text-primario' : 'hover:bg-superficie-2'}`;
+/** Logo oficial completo. Su texto es blanco, así que siempre va sobre una franja oscura fija. */
+export function LogoCompleto({ className = '' }) {
+    return (
+        <span className={`inline-flex items-center rounded-tema bg-[#1f2a22] px-4 py-2.5 shadow ${className}`}>
+            <img src={`${IMG_URL}/feder-logo.png`} alt="FEDER" className="h-9 w-auto" />
+        </span>
+    );
+}
+
+const enlace =({ isActive }) => `rounded-tema px-3 py-2 text-sm font-medium ${isActive ? 'bg-primario/10 text-primario' : 'hover:bg-superficie-2'}`;
 
 export default function PublicLayout() {
     const { autenticado } = useAuth();

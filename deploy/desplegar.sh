@@ -57,6 +57,7 @@ else
 fi
 
 paso "Enlace de almacenamiento (imágenes de productos)"
+mkdir -p storage/app/public/productos storage/app/public/emprendimientos
 php artisan storage:link 2>/dev/null || true
 
 paso "Permisos de escritura (Apache corre con otro usuario)"
@@ -64,7 +65,7 @@ chmod -R 777 storage bootstrap/cache
 
 paso "Enlaces simbólicos en $WEB_DIR"
 cd "$WEB_DIR"
-for f in index.php .htaccess build storage favicon.svg favicon.ico robots.txt; do
+for f in index.php .htaccess build storage img favicon.png favicon.svg favicon.ico robots.txt; do
     if [ -e "$APP_NAME/public/$f" ] || [ -L "$APP_NAME/public/$f" ]; then
         ln -sfn "$APP_NAME/public/$f" "$f"
     fi

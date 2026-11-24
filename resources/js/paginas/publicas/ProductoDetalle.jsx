@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ClipboardList, LoaderCircle, MapPin, ShoppingCart } from 'lucide-react';
-import api, { mensajeError } from '../../api/cliente';
+import api, { mensajeError, urlImagen } from '../../api/cliente';
 import { ImagenProducto, useAgregarAlCarrito } from '../../componentes/ProductoTarjeta';
 import { Alerta, Cargando, Insignia, Vacio } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
@@ -10,7 +10,7 @@ import { hoyISO, moneda, numero } from '../../utils/formato';
 function FormEncargo({ producto }) {
     const { autenticado, puede } = useAuth();
     const navegar = useNavigate();
-    const [d, setD] = useState({ cantidad: '1', fecha_requerida: hoyISO(7), observacion: '' });
+    const [d, setD] = useState({ cantidad: '1', fecha_requerida: hoyISO(1), observacion: '' });
     const [err, setErr] = useState({});
     const [msg, setMsg] = useState({ ok: '', error: '' });
     const [enviando, setEnviando] = useState(false);
@@ -95,7 +95,7 @@ export default function ProductoDetalle() {
         <div className="mx-auto max-w-6xl px-4 py-8">
             <Link to="/catalogo" className="mb-4 inline-flex items-center gap-1 text-sm text-primario hover:underline"><ArrowLeft className="size-4" /> Volver al catálogo</Link>
             <div className="grid gap-8 lg:grid-cols-2">
-                <div className="tarjeta overflow-hidden"><ImagenProducto producto={p} className="h-80" /></div>
+                <div className="tarjeta self-start overflow-hidden"><ImagenProducto producto={p} className="h-80 sm:h-96" /></div>
                 <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                         <Insignia color="primario">{p.categoria}</Insignia>
@@ -130,10 +130,13 @@ export default function ProductoDetalle() {
                             <h2 className="mb-2 font-semibold">Producido por</h2>
                             <ul className="space-y-2">
                                 {p.productores.map((e) => (
-                                    <li key={e.id} className="tarjeta flex items-start gap-3 p-3">
-                                        <MapPin className="mt-0.5 size-5 text-secundario" aria-hidden="true" />
+                                    <li key={e.id} className="tarjeta flex items-center gap-3 p-3">
+                                        {e.imagen
+                                            ? <img src={urlImagen(e.imagen)} alt={`Foto de ${e.nombre}`} className="size-16 shrink-0 rounded-full object-cover ring-2 ring-primario/20" loading="lazy" />
+                                            : <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-superficie-2"><MapPin className="size-6 text-secundario" aria-hidden="true" /></span>}
                                         <div>
                                             <p className="font-medium">{e.nombre}</p>
+                                            {e.responsable && <p className="text-sm">{e.responsable}</p>}
                                             <p className="text-sm text-suave">{e.comunidad} · {e.municipio}{e.temporada ? ` · Temporada: ${e.temporada}` : ''}</p>
                                         </div>
                                     </li>

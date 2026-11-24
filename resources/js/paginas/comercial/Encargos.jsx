@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Ban, Check, PackageCheck, Repeat, Store, Truck, X } from 'lucide-react';
-import api, { mensajeError } from '../../api/cliente';
+import api, { mensajeError, TARIFA_ENVIO } from '../../api/cliente';
 import { FiltroSelect, TablaDatos } from '../../componentes/Crud';
-import { Alerta, Confirmar, Encabezado, Estado, Modal } from '../../componentes/ui';
+import { Alerta, Cargando, Confirmar, Encabezado, Estado, Modal } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import useListado, { useAviso } from '../../hooks/useListado';
-import { capitalizar, fecha, moneda } from '../../utils/formato';
+import { cotizarEnvio } from '../../utils/envio';
+import { capitalizar, fecha, moneda, numero } from '../../utils/formato';
+
+const SelectorUbicacion = lazy(() => import('../../componentes/Mapa').then((m) => ({ default: m.SelectorUbicacion })));
 
 const ESTADOS = ['solicitado', 'aceptado', 'rechazado', 'disponible', 'convertido', 'cancelado'];
 
@@ -40,11 +43,20 @@ function ModalConvertir({ encargo, onCerrar }) {
     const navegar = useNavigate();
     const [tipo, setTipo] = useState('recojo');
     const [direccion, setDireccion] = useState(usuario?.direccion ?? '');
+    const [ubicacion, setUbicacion] = useState(null);
     const [error, setError] = useState('');
+    const cotizacion = tipo === 'envio' && ubicacion && TARIFA_ENVIO ? cotizarEnvio(TARIFA_ENVIO, ubicacion.lat, ubicacion.lng) : null;
     const enviar = async () => {
-        if (tipo === 'envio' && direccion.trim().length < 5) return setError('Indique la dirección de entrega (mínimo 5 caracteres).');
+        if (tipo === 'envio') {
+            if (!ubicacion) return setError('Marque la ubicación de entrega en el mapa.');
+            if (cotizacion?.fueraDeZona) return setError('La ubicación está fuera de la zona de envío. Elija recojo en FEDER.');
+            if (direccion.trim().length < 5) return setError('Indique la dirección de entrega (mínimo 5 caracteres).');
+        }
         try {
-            const { data } = await api.post(`/encargos/${encargo.id}/convertir`, { tipo_entrega: tipo, direccion: tipo === 'envio' ? direccion : null });
+            const envio = tipo === 'envio';
+            const { data } = await api.post(`/encargos/${encargo.id}/convertir`, {
+                tipo_entrega: tipo, direccion: envio ? direccion : null, latitud: envio ? ubicacion.lat : null, longitud: envio ? ubicacion.lng : null,
+            });
             navegar(`/panel/pedidos/${data.pedido_id}`, { state: { mensaje: data.message } });
         } catch (e) {
             setError(mensajeError(e));
@@ -62,7 +74,19 @@ function ModalConvertir({ encargo, onCerrar }) {
                         <button key={v} type="button" aria-pressed={tipo === v} onClick={() => setTipo(v)} className={`btn flex-col border py-3 ${tipo === v ? 'border-primario bg-primario/10 text-primario' : 'border-borde'}`}><I className="size-5" /> {t}</button>
                     ))}
                 </div>
-                {tipo === 'envio' && <div><label htmlFor="conv-dir" className="etiqueta">Dirección</label><input id="conv-dir" className="campo" maxLength={200} value={direccion} onChange={(e) => setDireccion(e.target.value)} /></div>}
+                {tipo === 'envio' && (
+                    <>
+                        <Suspense fallback={<Cargando texto="Cargando mapa…" />}>
+                            <SelectorUbicacion valor={ubicacion} onChange={setUbicacion} alto="h-60" />
+                        </Suspense>
+                        {cotizacion && (
+                            <p className={`rounded-tema px-3 py-2 text-sm ${cotizacion.fueraDeZona ? 'bg-peligro/10 text-peligro' : 'bg-primario/10'}`}>
+                                {cotizacion.fueraDeZona ? `A unos ${numero(cotizacion.km)} km: fuera de la zona de envío.` : <>Distancia aprox. <strong>{numero(cotizacion.km)} km</strong> · Envío <strong>{moneda(cotizacion.costo)}</strong></>}
+                            </p>
+                        )}
+                        <div><label htmlFor="conv-dir" className="etiqueta">Dirección</label><input id="conv-dir" className="campo" maxLength={200} value={direccion} onChange={(e) => setDireccion(e.target.value)} /></div>
+                    </>
+                )}
             </div>
         </Modal>
     );

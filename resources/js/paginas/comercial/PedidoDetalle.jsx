@@ -1,15 +1,66 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Ban, CalendarClock, CreditCard, LoaderCircle, MapPin, Printer, Route } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Ban, CalendarCheck, CalendarClock, CreditCard, LoaderCircle, MapPin, Printer, Route } from 'lucide-react';
 import api, { mensajeError } from '../../api/cliente';
 import ModalPago from '../../componentes/ModalPago';
 import { Alerta, Cargando, Confirmar, Encabezado, Estado, Modal, Tarjeta, Vacio } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import { useAviso } from '../../hooks/useListado';
-import { capitalizar, fecha, fechaHora, moneda, numero } from '../../utils/formato';
+import { LogoCompleto } from '../../layouts/PublicLayout';
+import { capitalizar, fecha, fechaEntrega, fechaHora, hoyISO, moneda, numero } from '../../utils/formato';
 
-const PASOS = ['pendiente', 'confirmado', 'en_preparacion', 'listo_entrega', 'entregado'];
-const ETIQUETA = { confirmado: 'Confirmar pedido', en_preparacion: 'Pasar a preparación', listo_entrega: 'Marcar listo para entrega', entregado: 'Marcar entregado' };
+const MapaUbicacion = lazy(() => import('../../componentes/Mapa').then((m) => ({ default: m.MapaUbicacion })));
+
+const PASOS = ['pendiente', 'confirmado', 'listo_entrega', 'entregado'];
+const nombrePaso = (paso, tipo) => ({
+    pendiente: 'Pendiente de pago',
+    confirmado: 'Confirmado',
+    listo_entrega: tipo === 'recojo' ? 'Listo para recoger' : 'Entrega programada',
+    entregado: 'Entregado',
+}[paso]);
+const ETIQUETA = { confirmado: 'Confirmar pedido', listo_entrega: 'Programar entrega', entregado: 'Marcar entregado' };
+
+/** El personal fija la fecha y hora aproximada de entrega (propone la fecha preferida del cliente). */
+export function ModalProgramar({ titulo, entrega, onCerrar, onGuardar }) {
+    const preferida = entrega.fecha_preferida && entrega.fecha_preferida >= hoyISO() ? entrega.fecha_preferida : null;
+    const actual = entrega.fecha_programada ? String(entrega.fecha_programada).replace(' ', 'T') : '';
+    const [dia, setDia] = useState(actual.slice(0, 10) || preferida || hoyISO(1));
+    const [hora, setHora] = useState(actual.slice(11, 16) || '15:00');
+    const [error, setError] = useState('');
+    const [enviando, setEnviando] = useState(false);
+
+    const guardar = async () => {
+        if (!dia || !hora) return setError('Indique la fecha y la hora aproximada.');
+        if (new Date(`${dia}T${hora}`) <= new Date()) return setError('La fecha y hora deben ser posteriores a este momento.');
+        setEnviando(true);
+        try {
+            await onGuardar(`${dia} ${hora}`);
+        } catch (e) {
+            setError(mensajeError(e));
+            setEnviando(false);
+        }
+    };
+
+    return (
+        <Modal abierto titulo={titulo} onCerrar={onCerrar} pie={
+            <><button type="button" className="btn-secundario" onClick={onCerrar}>Cancelar</button>
+                <button type="button" className="btn-primario" onClick={guardar} disabled={enviando}>{enviando ? <LoaderCircle className="size-4 animate-spin" /> : <CalendarCheck className="size-4" />} Guardar y notificar</button></>
+        }>
+            <div className="space-y-4">
+                <Alerta tipo="error">{error}</Alerta>
+                <p className="text-sm text-suave">
+                    {entrega.tipo === 'envio' ? `Envío a: ${entrega.direccion}` : 'Recojo en las oficinas de FEDER'}
+                    {entrega.fecha_preferida && <> · El cliente prefiere el <strong>{fecha(entrega.fecha_preferida)}</strong></>}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <div><label htmlFor="pr-dia" className="etiqueta">Fecha</label><input id="pr-dia" type="date" min={hoyISO()} className="campo" value={dia} onChange={(e) => setDia(e.target.value)} /></div>
+                    <div><label htmlFor="pr-hora" className="etiqueta">Hora aproximada</label><input id="pr-hora" type="time" step="900" className="campo" value={hora} onChange={(e) => setHora(e.target.value)} /></div>
+                </div>
+                <p className="rounded-tema bg-superficie-2 p-3 text-sm">Se descontará el stock reservado del inventario y el cliente recibirá una notificación con la fecha y hora.</p>
+            </div>
+        </Modal>
+    );
+}
 
 function ModalPlan({ pedido, saldo, onCerrar, onCreado }) {
     const [d, setD] = useState({ nro_cuotas: '3', frecuencia: 'mensual', cuota_inicial: '' });
@@ -64,6 +115,7 @@ export default function PedidoDetalle() {
     const [pagar, setPagar] = useState(null);
     const [plan, setPlan] = useState(false);
     const [cancelar, setCancelar] = useState(false);
+    const [programar, setProgramar] = useState(false);
     const [ocupado, setOcupado] = useState(false);
 
     const cargar = useCallback(() => api.get(`/pedidos/${id}`).then(({ data }) => setD(data)).catch((e) => setError(mensajeError(e))), [id]);
@@ -82,7 +134,14 @@ export default function PedidoDetalle() {
     const planVigente = d.plan?.estado === 'vigente';
     const puedeCancelar = puede('pedidos', 'eliminar') && (esStaff ? ['pendiente', 'confirmado'].includes(p.estado) : p.estado === 'pendiente');
 
+    const programarEntrega = async (fechaProgramada) => {
+        const { data } = await api.put(`/pedidos/${id}/estado`, { estado: 'listo_entrega', fecha_programada: fechaProgramada });
+        setProgramar(false);
+        aviso.ok(data.message);
+        cargar();
+    };
     const avanzar = async (estado) => {
+        if (estado === 'listo_entrega') return setProgramar(true);
         setOcupado(true);
         try {
             const { data } = await api.put(`/pedidos/${id}/estado`, { estado });
@@ -113,6 +172,7 @@ export default function PedidoDetalle() {
     return (
         <>
             <Link to="/panel/pedidos" className="mb-3 inline-flex items-center gap-1 text-sm text-primario hover:underline print:hidden"><ArrowLeft className="size-4" /> Pedidos</Link>
+            <div className="mb-4 hidden print:block"><LogoCompleto /></div>
             <Encabezado titulo={`Pedido ${p.numero}`} descripcion={`${fechaHora(p.fecha)} · ${capitalizar(p.origen)}${d.gestor ? ` · Gestionado por ${d.gestor}` : ''}`}>
                 <button type="button" className="btn-secundario print:hidden" onClick={() => window.print()}><Printer className="size-4" /> Imprimir</button>
                 {puedeCancelar && <button type="button" className="btn-peligro print:hidden" onClick={() => setCancelar(true)}><Ban className="size-4" /> Cancelar pedido</button>}
@@ -126,7 +186,7 @@ export default function PedidoDetalle() {
                     return (
                         <li key={paso} className="flex items-center gap-2">
                             <span className={`flex size-7 items-center justify-center rounded-full text-xs font-bold ${i <= actual ? 'bg-primario text-sobre-primario' : 'bg-superficie-2 text-suave'}`} aria-current={i === actual ? 'step' : undefined}>{i + 1}</span>
-                            <span className={`text-sm ${i === actual ? 'font-semibold' : 'text-suave'}`}>{capitalizar(paso)}</span>
+                            <span className={`text-sm ${i === actual ? 'font-semibold' : 'text-suave'}`}>{nombrePaso(paso, d.entrega.tipo)}</span>
                             {i < PASOS.length - 1 && <ArrowRight className="size-4 text-suave" aria-hidden="true" />}
                         </li>
                     );
@@ -203,6 +263,8 @@ export default function PedidoDetalle() {
                                 </button>
                             ))}
                             {p.estado === 'pendiente' && saldoPend > 0 && <p className="mt-2 text-xs text-suave">Se confirma automáticamente al completar el pago. Confirmar manualmente deja el saldo como pago contra entrega.</p>}
+                            {p.estado === 'confirmado' && <p className="mt-2 text-xs text-suave">Fije cuándo se entregará{d.entrega.fecha_preferida ? ` (el cliente prefiere el ${fecha(d.entrega.fecha_preferida)})` : ''}. El cliente recibe la fecha y hora por notificación.</p>}
+                            {p.estado === 'listo_entrega' && <p className="mt-2 text-xs text-suave">También puede despachar o reprogramar desde <Link to="/panel/entregas" className="text-primario underline">Entregas</Link>.</p>}
                         </Tarjeta>
                     )}
                     <Tarjeta titulo="Cliente">
@@ -211,14 +273,31 @@ export default function PedidoDetalle() {
                         {p.nit_ci && <p className="mt-2 text-sm">Factura: NIT/CI {p.nit_ci} · {p.razon_social}</p>}
                     </Tarjeta>
                     <Tarjeta titulo="Entrega">
-                        <p className="flex items-center gap-2"><MapPin className="size-4 text-secundario" /> {d.entrega.tipo === 'envio' ? 'Envío a domicilio' : 'Recojo en oficinas de FEDER'} <Estado valor={d.entrega.estado} /></p>
+                        <p className="flex flex-wrap items-center gap-2"><MapPin className="size-4 text-secundario" /> {d.entrega.tipo === 'envio' ? 'Envío a domicilio' : 'Recojo en oficinas de FEDER'} <Estado valor={d.entrega.estado} /></p>
                         {d.entrega.direccion && <p className="mt-1 text-sm">{d.entrega.direccion}{d.entrega.referencia ? ` (${d.entrega.referencia})` : ''}</p>}
-                        {d.entrega.fecha_programada && <p className="mt-1 text-sm text-suave">Programada: {fecha(d.entrega.fecha_programada)}</p>}
-                        {d.entrega.fecha_entrega && <p className="mt-1 text-sm text-suave">Entregada: {fechaHora(d.entrega.fecha_entrega)} a {d.entrega.receptor}</p>}
+                        {d.entrega.distancia_km && <p className="text-xs text-suave">A {numero(d.entrega.distancia_km)} km de FEDER · envío {moneda(p.costo_envio)}</p>}
+                        {d.entrega.fecha_programada && !d.entrega.fecha_entrega && p.estado !== 'cancelado' && (
+                            <div className="mt-3 rounded-tema border border-primario/30 bg-primario/10 p-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-primario">{d.entrega.tipo === 'recojo' ? 'Puedes recogerlo desde el' : 'Se entregará el'}</p>
+                                <p className="flex items-center gap-2 text-lg font-bold"><CalendarCheck className="size-5 text-primario" /> {fechaEntrega(d.entrega.fecha_programada)}</p>
+                                <p className="text-xs text-suave">Hora aproximada</p>
+                            </div>
+                        )}
+                        {!d.entrega.fecha_programada && ['pendiente', 'confirmado'].includes(p.estado) && (
+                            <p className="mt-2 text-sm text-suave">{d.entrega.fecha_preferida ? `Fecha preferida: ${fecha(d.entrega.fecha_preferida)}. ` : ''}FEDER confirmará la fecha y hora de entrega.</p>
+                        )}
+                        {d.entrega.fecha_entrega && <p className="mt-2 text-sm text-suave">Entregada: {fechaHora(d.entrega.fecha_entrega)} a {d.entrega.receptor}</p>}
+                        <div className="mt-3 print:hidden">
+                            {d.entrega.tipo === 'recojo' && <p className="mb-1 text-sm font-medium">Recoge tu pedido aquí:</p>}
+                            <Suspense fallback={<Cargando texto="Cargando mapa…" />}>
+                                <MapaUbicacion lat={d.entrega.latitud} lng={d.entrega.longitud} alto="h-48" />
+                            </Suspense>
+                        </div>
                     </Tarjeta>
                 </div>
             </div>
 
+            {programar && <ModalProgramar titulo={`Programar entrega · ${p.numero}`} entrega={d.entrega} onCerrar={() => setProgramar(false)} onGuardar={programarEntrega} />}
             {plan && <ModalPlan pedido={p} saldo={saldoPend} onCerrar={() => setPlan(false)} onCreado={(m) => { setPlan(false); aviso.ok(m); cargar(); }} />}
             {pagar?.tipo === 'pedido' && (
                 <ModalPago titulo={`Pagar pedido ${p.numero}`} montoMaximo={Number(porPagar.toFixed(2))} numeroPedido={p.numero}

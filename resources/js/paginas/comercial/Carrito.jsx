@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LoaderCircle, Minus, Plus, ShoppingBag, Store, Trash2, Truck } from 'lucide-react';
+import { LoaderCircle, MapPin, Minus, Plus, ShoppingBag, Store, Trash2, Truck } from 'lucide-react';
 import api, { erroresCampos, mensajeError } from '../../api/cliente';
 import { ImagenProducto } from '../../componentes/ProductoTarjeta';
 import { Alerta, Cargando, Vacio } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import { useCarrito } from '../../contextos/CarritoContext';
+import { cotizarEnvio } from '../../utils/envio';
 import { hoyISO, moneda, numero } from '../../utils/formato';
+
+const SelectorUbicacion = lazy(() => import('../../componentes/Mapa').then((m) => ({ default: m.SelectorUbicacion })));
 
 /** CU5: carrito de compras y confirmación de la compra (venta inmediata). */
 export default function Carrito() {
@@ -15,7 +18,8 @@ export default function Carrito() {
     const navegar = useNavigate();
     const [error, setError] = useState('');
     const [ocupado, setOcupado] = useState(null);
-    const [entrega, setEntrega] = useState({ tipo_entrega: 'recojo', direccion: usuario?.direccion ?? '', referencia: '', fecha_programada: '', nit_ci: '', razon_social: '' });
+    const [entrega, setEntrega] = useState({ tipo_entrega: 'recojo', direccion: usuario?.direccion ?? '', referencia: '', fecha_preferida: '', nit_ci: '', razon_social: '' });
+    const [ubicacion, setUbicacion] = useState(null);
     const [errores, setErrores] = useState({});
     const [enviando, setEnviando] = useState(false);
 
@@ -35,8 +39,12 @@ export default function Carrito() {
 
     const validar = () => {
         const e = {};
-        if (entrega.tipo_entrega === 'envio' && entrega.direccion.trim().length < 5) e.direccion = 'Para envío a domicilio indique la dirección (mínimo 5 caracteres).';
-        if (entrega.fecha_programada && entrega.fecha_programada < hoyISO()) e.fecha_programada = 'La fecha no puede ser anterior a hoy.';
+        if (entrega.tipo_entrega === 'envio') {
+            if (!ubicacion) e.latitud = 'Marque su ubicación en el mapa.';
+            else if (cotizacion?.fueraDeZona) e.latitud = `La ubicación está fuera de la zona de envío (máx. ${carrito.tarifa_envio.max_km} km). Elija recojo en FEDER.`;
+            if (entrega.direccion.trim().length < 5) e.direccion = 'Para envío a domicilio indique la dirección (mínimo 5 caracteres).';
+        }
+        if (entrega.fecha_preferida && entrega.fecha_preferida < hoyISO()) e.fecha_preferida = 'La fecha no puede ser anterior a hoy.';
         if (entrega.nit_ci && !/^\d{5,15}(-?[A-Za-z0-9]{1,3})?$/.test(entrega.nit_ci.trim())) e.nit_ci = 'El NIT/CI debe tener entre 5 y 15 dígitos.';
         if (entrega.nit_ci && !entrega.razon_social.trim()) e.razon_social = 'Indique la razón social para la factura.';
         setErrores(e);
@@ -49,9 +57,13 @@ export default function Carrito() {
         setEnviando(true);
         setError('');
         try {
+            const esEnvio = entrega.tipo_entrega === 'envio';
             const { data } = await api.post('/carrito/confirmar', {
                 ...entrega,
-                direccion: entrega.tipo_entrega === 'envio' ? entrega.direccion : null,
+                fecha_preferida: entrega.fecha_preferida || null,
+                direccion: esEnvio ? entrega.direccion : null,
+                latitud: esEnvio ? ubicacion?.lat : null,
+                longitud: esEnvio ? ubicacion?.lng : null,
             });
             await recargar();
             navegar(`/panel/pedidos/${data.pedido_id}`, { state: { mensaje: data.message } });
@@ -63,7 +75,9 @@ export default function Carrito() {
         }
     };
 
-    const envio = entrega.tipo_entrega === 'envio' ? carrito.costo_envio_referencial : 0;
+    const esEnvio = entrega.tipo_entrega === 'envio';
+    const cotizacion = esEnvio && ubicacion && carrito.tarifa_envio ? cotizarEnvio(carrito.tarifa_envio, ubicacion.lat, ubicacion.lng) : null;
+    const envio = cotizacion?.costo ?? 0;
     const hayProblemas = carrito.detalles.some((d) => d.estado !== 'activo' || Number(d.cantidad) > Number(d.stock_disponible));
 
     return (
@@ -109,15 +123,31 @@ export default function Carrito() {
                     <form onSubmit={confirmar} noValidate className="tarjeta h-fit space-y-4 p-5" aria-label="Confirmar compra">
                         <h2 className="text-lg font-semibold">Entrega y facturación</h2>
                         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de entrega">
-                            {[['recojo', 'Recojo en FEDER', Store], ['envio', `Envío (${moneda(carrito.costo_envio_referencial)})`, Truck]].map(([v, t, I]) => (
+                            {[['recojo', 'Recojo en FEDER (gratis)', Store], ['envio', 'Envío (según distancia)', Truck]].map(([v, t, I]) => (
                                 <button key={v} type="button" role="radio" aria-checked={entrega.tipo_entrega === v} onClick={() => setEntrega({ ...entrega, tipo_entrega: v })}
                                     className={`btn flex-col border py-3 text-sm ${entrega.tipo_entrega === v ? 'border-primario bg-primario/10 text-primario' : 'border-borde'}`}>
                                     <I className="size-5" /> {t}
                                 </button>
                             ))}
                         </div>
-                        {entrega.tipo_entrega === 'envio' && (
+                        {esEnvio && (
                             <>
+                                <div>
+                                    <p className="etiqueta flex items-center gap-1"><MapPin className="size-4" /> Ubicación de entrega <span className="text-peligro">*</span></p>
+                                    <Suspense fallback={<Cargando texto="Cargando mapa…" />}>
+                                        <SelectorUbicacion valor={ubicacion} onChange={(u) => { setUbicacion(u); setErrores((x) => ({ ...x, latitud: undefined })); }} error={errores.latitud} alto="h-64" />
+                                    </Suspense>
+                                    {cotizacion && (
+                                        <p className={`mt-2 rounded-tema px-3 py-2 text-sm ${cotizacion.fueraDeZona ? 'bg-peligro/10 text-peligro' : 'bg-primario/10'}`}>
+                                            {cotizacion.fueraDeZona
+                                                ? `Está a unos ${numero(cotizacion.km)} km: fuera de la zona de envío (máx. ${carrito.tarifa_envio.max_km} km).`
+                                                : <>Distancia aprox. <strong>{numero(cotizacion.km)} km</strong> · Envío <strong>{moneda(cotizacion.costo)}</strong></>}
+                                        </p>
+                                    )}
+                                    <p className="mt-1 text-xs text-suave">
+                                        Tarifa: {moneda(carrito.tarifa_envio?.base)} hasta {carrito.tarifa_envio?.km_incluidos} km, luego {moneda(carrito.tarifa_envio?.por_km)} por km.
+                                    </p>
+                                </div>
                                 <div>
                                     <label htmlFor="c-dir" className="etiqueta">Dirección de entrega <span className="text-peligro">*</span></label>
                                     <input id="c-dir" className={`campo ${errores.direccion ? 'campo-error' : ''}`} maxLength={200} value={entrega.direccion} onChange={(e) => setEntrega({ ...entrega, direccion: e.target.value })} aria-invalid={!!errores.direccion} />
@@ -130,9 +160,10 @@ export default function Carrito() {
                             </>
                         )}
                         <div>
-                            <label htmlFor="c-fecha" className="etiqueta">Fecha preferida (opcional)</label>
-                            <input id="c-fecha" type="date" min={hoyISO()} className={`campo ${errores.fecha_programada ? 'campo-error' : ''}`} value={entrega.fecha_programada} onChange={(e) => setEntrega({ ...entrega, fecha_programada: e.target.value })} />
-                            {errores.fecha_programada && <p className="mt-1 text-sm text-peligro">{errores.fecha_programada}</p>}
+                            <label htmlFor="c-fecha" className="etiqueta">Fecha preferida de {esEnvio ? 'entrega' : 'recojo'} (opcional)</label>
+                            <input id="c-fecha" type="date" min={hoyISO()} className={`campo ${errores.fecha_preferida ? 'campo-error' : ''}`} value={entrega.fecha_preferida} onChange={(e) => setEntrega({ ...entrega, fecha_preferida: e.target.value })} aria-describedby="c-fecha-ayuda" />
+                            <p id="c-fecha-ayuda" className="mt-1 text-xs text-suave">FEDER te confirmará la fecha y hora exactas por notificación.</p>
+                            {errores.fecha_preferida && <p className="mt-1 text-sm text-peligro">{errores.fecha_preferida}</p>}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -148,7 +179,7 @@ export default function Carrito() {
                         </div>
                         <dl className="space-y-1 border-t border-borde pt-3 text-sm">
                             <div className="flex justify-between"><dt>Subtotal</dt><dd>{moneda(carrito.subtotal)}</dd></div>
-                            <div className="flex justify-between"><dt>Envío</dt><dd>{moneda(envio)}</dd></div>
+                            <div className="flex justify-between"><dt>Envío</dt><dd>{esEnvio && !cotizacion ? 'Marque su ubicación' : moneda(envio)}</dd></div>
                             <div className="flex justify-between text-lg font-bold"><dt>Total</dt><dd>{moneda(Number(carrito.subtotal) + envio)}</dd></div>
                         </dl>
                         <button type="submit" className="btn-primario w-full" disabled={enviando || hayProblemas}>

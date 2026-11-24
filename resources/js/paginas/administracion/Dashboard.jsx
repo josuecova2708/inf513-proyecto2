@@ -4,7 +4,7 @@ import { AlertTriangle, Banknote, Eye, KeyRound, Receipt, ShieldX, TrendingUp, U
 import api from '../../api/cliente';
 import { GraficoBarras, GraficoLineas } from '../../componentes/Graficos';
 import { Cargando, Encabezado, Metrica, Tarjeta } from '../../componentes/ui';
-import { fechaHora, moneda, numero } from '../../utils/formato';
+import { etiquetaEstado, fechaHora, moneda, numero } from '../../utils/formato';
 
 /** Panel analítico: actividad del negocio y flujo de accesos al sitio. */
 export default function Dashboard() {
@@ -43,7 +43,7 @@ export default function Dashboard() {
                     <div className="grid gap-4 lg:grid-cols-2">
                         <Tarjeta titulo="Ventas por día (Bs.)"><GraficoLineas datos={d.ventas_por_dia} x="dia" series={[{ clave: 'ventas', nombre: 'Ventas', color: 'primario' }]} formato={moneda} fechaX /></Tarjeta>
                         <Tarjeta titulo="Productos más vendidos (Bs.)"><GraficoBarras datos={d.top_productos} x="producto" y="monto" nombre="Monto" formato={moneda} horizontal /></Tarjeta>
-                        <Tarjeta titulo="Pedidos por estado"><GraficoBarras datos={d.pedidos_por_estado} x="estado" y="total" nombre="Pedidos" horizontal /></Tarjeta>
+                        <Tarjeta titulo="Pedidos por estado"><GraficoBarras datos={d.pedidos_por_estado.map((x) => ({ ...x, estado: etiquetaEstado(x.estado) }))} x="estado" y="total" nombre="Pedidos" horizontal /></Tarjeta>
                         <Tarjeta titulo="Ventas por comunidad de origen (Bs.)"><GraficoBarras datos={d.ventas_por_comunidad} x="comunidad" y="monto" nombre="Monto" formato={moneda} horizontal /></Tarjeta>
                     </div>
 

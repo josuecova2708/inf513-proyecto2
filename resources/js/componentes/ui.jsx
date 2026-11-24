@@ -1,6 +1,6 @@
-import { forwardRef, useEffect, useId, useRef } from 'react';
+import { Children, forwardRef, useEffect, useId, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Inbox, LoaderCircle, X } from 'lucide-react';
-import { capitalizar, COLOR_ESTADO } from '../utils/formato';
+import { COLOR_ESTADO, etiquetaEstado } from '../utils/formato';
 
 const COLORES = {
     exito: 'bg-exito/15 text-exito',
@@ -17,8 +17,11 @@ export function Insignia({ color = 'suave', children }) {
 }
 
 export function Estado({ valor }) {
-    return <Insignia color={COLOR_ESTADO[valor] ?? 'suave'}>{capitalizar(valor)}</Insignia>;
+    return <Insignia color={COLOR_ESTADO[valor] ?? 'suave'}>{etiquetaEstado(valor)}</Insignia>;
 }
+
+/** true si los hijos no tienen nada visible (null, false, '' o solo espacios). */
+const sinContenido = (children) => Children.toArray(children).every((c) => typeof c === 'string' && !c.trim());
 
 export function Cargando({ texto = 'Cargando…', className = '' }) {
     return (
@@ -39,7 +42,7 @@ export function Vacio({ texto = 'No hay registros para mostrar.', children }) {
 }
 
 export function Alerta({ tipo = 'info', children, onCerrar }) {
-    if (!children) return null;
+    if (sinContenido(children)) return null;
     const estilos = {
         info: 'border-info/40 bg-info/10',
         exito: 'border-exito/40 bg-exito/10',

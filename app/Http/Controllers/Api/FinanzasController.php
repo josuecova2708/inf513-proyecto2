@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 /** CU7: indicadores financieros (portado de IndicadorHandler del 1er parcial + planes de pago). */
 class FinanzasController extends Controller
 {
-    public const VENDIDO = ['confirmado', 'en_preparacion', 'listo_entrega', 'entregado'];
+    public const VENDIDO = ['confirmado', 'listo_entrega', 'entregado'];
 
     public function indicadores(Request $request): JsonResponse
     {

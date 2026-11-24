@@ -122,6 +122,21 @@ Usa cualquier CVV y una fecha de vencimiento futura.
 | `No application encryption key` | Ejecuta `php artisan key:generate` |
 | La página carga en blanco | Asegúrate de tener `npm run dev` corriendo, o ejecuta `npm run build` |
 | `Vite manifest not found` | Ejecuta `npm run build`, o deja corriendo `npm run dev` |
+| Las fotos no se ven (404 en `/storage/...`) | Ejecuta `php artisan storage:link` |
+| Al subir una foto: `could not find gd` o la foto no se comprime | Activa la extensión `gd` en el `php.ini` (o en Laragon) |
+
+---
+
+## Imágenes
+
+- **Quién sube qué:**
+  - Admin y Personal suben la foto de cada producto (*Catálogo e inventario → Productos*).
+  - Cada productor sube la foto de su emprendimiento (*Mi emprendimiento → ver detalle*), que se muestra en "Producido por" en la ficha del producto.
+- **Dónde se guardan:** `storage/app/public/productos` y `storage/app/public/emprendimientos`.
+  - La carpeta está fuera de git, así que `git pull` no la toca, y se publica con el enlace `public/storage`.
+  - **No la borres al actualizar.** Para respaldarla: `tar czf imagenes.tgz storage/app/public`.
+- **Tamaño:** cada foto se reduce en el navegador y el servidor la guarda como WEBP de 1000 px (unos 100 KB), así que la carpeta crece poco.
+- **Fotos demo:** están en `database/seeders/imagenes/` (de Wikimedia Commons; licencias en `CREDITOS.md`). `migrate:fresh --seed` las copia y las asigna.
 
 ---
 

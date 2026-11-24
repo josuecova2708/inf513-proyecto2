@@ -6,6 +6,7 @@ use App\Exceptions\ErrorNegocio;
 use App\Http\Controllers\Controller;
 use App\Models\Emprendimiento;
 use App\Models\Usuario;
+use App\Services\ImagenServicio;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -122,9 +123,36 @@ class EmprendimientoController extends Controller
 
             return $this->mensaje('El productor tiene producción registrada: se dio de baja (inactivo) para conservar la trazabilidad.');
         }
+        ImagenServicio::eliminar($e->imagen);
         $e->delete();
 
         return $this->mensaje('Productor eliminado.');
+    }
+
+    /** Foto del emprendimiento (la sube el propio productor o el personal). Se comprime a WEBP. */
+    public function subirImagen(Request $request, int $id): JsonResponse
+    {
+        $request->validate(
+            ['imagen' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096']],
+            ['imagen.required' => 'Elija una imagen.', 'imagen.max' => 'La imagen no puede pesar más de 4 MB.', 'imagen.mimes' => 'La imagen debe ser JPG, PNG o WEBP.', 'imagen.image' => 'La imagen debe ser JPG, PNG o WEBP.']
+        );
+        $e = Emprendimiento::findOrFail($id);
+        $this->verificarAcceso($request->user(), $e);
+        $anterior = $e->imagen;
+        $e->update(['imagen' => ImagenServicio::guardar($request->file('imagen'), 'emprendimientos')]);
+        ImagenServicio::eliminar($anterior);
+
+        return $this->mensaje('Foto del emprendimiento actualizada.', ['imagen' => $e->imagen]);
+    }
+
+    public function quitarImagen(Request $request, int $id): JsonResponse
+    {
+        $e = Emprendimiento::findOrFail($id);
+        $this->verificarAcceso($request->user(), $e);
+        ImagenServicio::eliminar($e->imagen);
+        $e->update(['imagen' => null]);
+
+        return $this->mensaje('Foto del emprendimiento eliminada.');
     }
 
     public function guardarOferta(Request $request, int $id): JsonResponse

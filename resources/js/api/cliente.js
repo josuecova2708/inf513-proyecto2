@@ -5,6 +5,11 @@ const config = window.FEDER ?? { basePath: '', apiUrl: '/api', storageUrl: '/sto
 
 export const BASE_PATH = config.basePath || '';
 export const STORAGE_URL = config.storageUrl;
+export const IMG_URL = config.imgUrl ?? `${BASE_PATH}/img`;
+/** Oficinas de FEDER: punto de recojo y origen de los envíos (config/feder.php) */
+export const UBICACION_FEDER = config.ubicacion ?? { lat: -17.77981, lng: -63.163828, direccion: 'Oficinas de FEDER' };
+/** Parámetros de la tarifa de envío (vista previa; el cobro lo calcula el servidor) */
+export const TARIFA_ENVIO = config.tarifaEnvio ?? null;
 const CLAVE_TOKEN = 'feder_token';
 
 export const tokenGuardado = () => localStorage.getItem(CLAVE_TOKEN);

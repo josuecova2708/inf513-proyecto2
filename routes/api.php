@@ -78,6 +78,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('emprendimientos/{id}', [EmprendimientoController::class, 'show'])->middleware('permiso:emprendimientos,ver');
     Route::put('emprendimientos/{id}', [EmprendimientoController::class, 'update'])->middleware('permiso:emprendimientos,editar');
     Route::delete('emprendimientos/{id}', [EmprendimientoController::class, 'destroy'])->middleware('permiso:emprendimientos,eliminar');
+    Route::post('emprendimientos/{id}/imagen', [EmprendimientoController::class, 'subirImagen'])->middleware('permiso:emprendimientos,editar'); // multipart
+    Route::delete('emprendimientos/{id}/imagen', [EmprendimientoController::class, 'quitarImagen'])->middleware('permiso:emprendimientos,editar');
     Route::post('emprendimientos/{id}/ofertas', [EmprendimientoController::class, 'guardarOferta'])->middleware('permiso:ofertas,crear');
     Route::delete('emprendimientos/{id}/ofertas/{productoId}', [EmprendimientoController::class, 'eliminarOferta'])->middleware('permiso:ofertas,eliminar');
 

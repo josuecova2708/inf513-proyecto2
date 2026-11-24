@@ -42,6 +42,8 @@ Columna **Permiso**: `modulo,acción` que exige el middleware `permiso` contra l
 | GET | `/api/emprendimientos/{id}` | EmprendimientoController@show | `emprendimientos,ver` |
 | PUT | `/api/emprendimientos/{id}` | EmprendimientoController@update | `emprendimientos,editar` |
 | DELETE | `/api/emprendimientos/{id}` | EmprendimientoController@destroy | `emprendimientos,eliminar` |
+| POST | `/api/emprendimientos/{id}/imagen` | EmprendimientoController@subirImagen | `emprendimientos,editar` |
+| DELETE | `/api/emprendimientos/{id}/imagen` | EmprendimientoController@quitarImagen | `emprendimientos,editar` |
 | POST | `/api/emprendimientos/{id}/ofertas` | EmprendimientoController@guardarOferta | `ofertas,crear` |
 | DELETE | `/api/emprendimientos/{id}/ofertas/{productoId}` | EmprendimientoController@eliminarOferta | `ofertas,eliminar` |
 | GET | `/api/encargos` | EncargoController@index | `encargos,ver` |

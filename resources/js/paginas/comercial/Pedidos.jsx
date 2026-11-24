@@ -4,9 +4,9 @@ import { BarraFiltros, FiltroSelect, TablaDatos } from '../../componentes/Crud';
 import { Encabezado, Estado, Insignia } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import useListado from '../../hooks/useListado';
-import { capitalizar, fechaHora, moneda } from '../../utils/formato';
+import { capitalizar, etiquetaEstado, fechaHora, moneda } from '../../utils/formato';
 
-const ESTADOS = ['pendiente', 'confirmado', 'en_preparacion', 'listo_entrega', 'entregado', 'cancelado'];
+const ESTADOS = ['pendiente', 'confirmado', 'listo_entrega', 'entregado', 'cancelado'];
 
 /** CU6: procesar pedidos. */
 export default function Pedidos() {
@@ -16,10 +16,10 @@ export default function Pedidos() {
 
     return (
         <>
-            <Encabezado titulo={esStaff ? 'Pedidos' : 'Mis pedidos'} descripcion="CU6 · Flujo: pendiente → confirmado (pagado) → en preparación → listo para entrega → entregado" />
+            <Encabezado titulo={esStaff ? 'Pedidos' : 'Mis pedidos'} descripcion="CU6 · Flujo: pendiente de pago → confirmado → entrega programada → entregado" />
             <section className="tarjeta">
                 <BarraFiltros listado={listado} placeholder={esStaff ? 'N.º de pedido o cliente' : 'N.º de pedido'}>
-                    <FiltroSelect etiqueta="Estado" valor={listado.filtros.estado} onChange={(v) => listado.setFiltro('estado', v)} opciones={ESTADOS.map((e) => ({ value: e, label: capitalizar(e) }))} />
+                    <FiltroSelect etiqueta="Estado" valor={listado.filtros.estado} onChange={(v) => listado.setFiltro('estado', v)} opciones={ESTADOS.map((e) => ({ value: e, label: etiquetaEstado(e) }))} />
                     <div><label className="etiqueta text-xs" htmlFor="p-desde">Desde</label><input id="p-desde" type="date" className="campo" value={listado.filtros.desde} onChange={(e) => listado.setFiltro('desde', e.target.value)} /></div>
                     <div><label className="etiqueta text-xs" htmlFor="p-hasta">Hasta</label><input id="p-hasta" type="date" className="campo" min={listado.filtros.desde} value={listado.filtros.hasta} onChange={(e) => listado.setFiltro('hasta', e.target.value)} /></div>
                 </BarraFiltros>

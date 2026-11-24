@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Producto;
+use App\Services\ImagenServicio;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 /** CU4: catálogo unificado de productos (gestión interna). */
@@ -25,7 +25,7 @@ class ProductoController extends Controller
             'modalidad_venta' => ['required', Rule::in(['inmediata', 'encargo', 'ambas'])],
             'stock_minimo' => ['required', 'numeric', 'min:0', 'max:1000000'],
             'estado' => ['required', Rule::in(['activo', 'inactivo'])],
-            'imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'quitar_imagen' => ['nullable', 'boolean'],
         ];
     }
@@ -33,7 +33,9 @@ class ProductoController extends Controller
     private const MENSAJES = [
         'nombre.unique' => 'Ya existe un producto con ese nombre.',
         'precio_venta.gt' => 'El precio de venta debe ser mayor que 0.',
-        'imagen.max' => 'La imagen no puede pesar más de 2 MB.',
+        'imagen.max' => 'La imagen no puede pesar más de 4 MB.',
+        'imagen.mimes' => 'La imagen debe ser JPG, PNG o WEBP.',
+        'imagen.image' => 'La imagen debe ser JPG, PNG o WEBP.',
     ];
 
     public function index(Request $request): JsonResponse
@@ -62,7 +64,7 @@ class ProductoController extends Controller
     public function store(Request $request): JsonResponse
     {
         $d = $request->validate($this->reglas(), self::MENSAJES);
-        $d['imagen'] = $request->hasFile('imagen') ? $request->file('imagen')->store('productos', 'public') : null;
+        $d['imagen'] = $request->hasFile('imagen') ? ImagenServicio::guardar($request->file('imagen'), 'productos') : null;
         unset($d['quitar_imagen']);
         $p = Producto::create($d);
 
@@ -74,10 +76,8 @@ class ProductoController extends Controller
         $p = Producto::findOrFail($id);
         $d = $request->validate($this->reglas($id), self::MENSAJES);
         if ($request->hasFile('imagen') || $request->boolean('quitar_imagen')) {
-            if ($p->imagen) {
-                Storage::disk('public')->delete($p->imagen);
-            }
-            $d['imagen'] = $request->hasFile('imagen') ? $request->file('imagen')->store('productos', 'public') : null;
+            ImagenServicio::eliminar($p->imagen);
+            $d['imagen'] = $request->hasFile('imagen') ? ImagenServicio::guardar($request->file('imagen'), 'productos') : null;
         } else {
             unset($d['imagen']);
         }
@@ -97,9 +97,7 @@ class ProductoController extends Controller
 
             return $this->mensaje('El producto tiene historial de ventas o producción: se desactivó del catálogo.');
         }
-        if ($p->imagen) {
-            Storage::disk('public')->delete($p->imagen);
-        }
+        ImagenServicio::eliminar($p->imagen);
         DB::table('emprendimiento_producto')->where('producto_id', $id)->delete();
         DB::table('alerta_inventario')->where('producto_id', $id)->delete();
         $p->delete();

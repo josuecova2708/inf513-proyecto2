@@ -41,10 +41,13 @@ class EntregaController extends Controller
     {
         $d = $request->validate([
             'estado' => ['required', Rule::in(['pendiente', 'en_camino', 'entregada', 'fallida'])],
-            'fecha_programada' => ['nullable', 'date'],
+            'fecha_programada' => ['nullable', 'date', 'after:now'],
             'receptor' => ['nullable', 'required_if:estado,entregada', 'string', 'min:3', 'max:120'],
             'referencia' => ['nullable', 'string', 'max:200'],
-        ], ['receptor.required_if' => 'Indique el nombre de quien recibió el pedido.']);
+        ], [
+            'receptor.required_if' => 'Indique el nombre de quien recibió el pedido.',
+            'fecha_programada.after' => 'La nueva fecha y hora de entrega deben ser posteriores a este momento.',
+        ]);
         $gestor = $request->user();
 
         $msg = DB::transaction(function () use ($d, $id, $gestor) {
@@ -54,8 +57,10 @@ class EntregaController extends Controller
                 throw new ErrorNegocio('La entrega ya fue completada y no puede modificarse.');
             }
             if (in_array($d['estado'], ['en_camino', 'entregada'], true) && ! in_array($p->estado, ['listo_entrega', 'entregado'], true)) {
-                throw new ErrorNegocio("El pedido {$p->numero} está ".PedidoServicio::etiqueta($p->estado).'; debe estar LISTO ENTREGA para despacharse.');
+                throw new ErrorNegocio("El pedido {$p->numero} está ".PedidoServicio::etiqueta($p->estado).'; primero hay que programar la entrega.');
             }
+            $reprogramada = ! empty($d['fecha_programada']) && $p->estado === 'listo_entrega'
+                && $d['fecha_programada'] !== substr((string) $en->fecha_programada, 0, 16);
             if ($d['estado'] === 'en_camino' && $en->tipo === 'recojo') {
                 throw new ErrorNegocio('Las entregas por recojo en oficina no pasan por "en camino".');
             }
@@ -68,6 +73,11 @@ class EntregaController extends Controller
                 'fecha_entrega' => $d['estado'] === 'entregada' ? now() : null,
             ], fn ($v) => $v !== null));
 
+            if ($reprogramada) {
+                PedidoServicio::notificarProgramacion($p, $d['fecha_programada'], true);
+
+                return "Entrega del pedido {$p->numero} reprogramada para el ".PedidoServicio::fechaAmigable($d['fecha_programada']).'. Se notificó al cliente.';
+            }
             if ($d['estado'] === 'en_camino') {
                 NotificacionServicio::notificar($p->cliente_id, 'entrega_en_camino', "Tu pedido {$p->numero} está EN CAMINO a: {$en->direccion}.", $p->id);
             }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Eye, Sprout } from 'lucide-react';
-import api from '../api/cliente';
+import { Eye } from 'lucide-react';
+import api, { IMG_URL } from '../api/cliente';
 import { numero } from '../utils/formato';
 
 /** Normaliza la ruta para contar por página (ej. /panel/pedidos/12 -> /panel/pedidos/:id). */
@@ -42,7 +42,7 @@ export default function Footer() {
         <footer className="mt-auto border-t border-borde bg-superficie">
             <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-sm text-suave sm:flex-row">
                 <div className="flex items-center gap-2">
-                    <Sprout className="size-5 text-primario" aria-hidden="true" />
+                    <span className="flex size-7 items-center justify-center rounded bg-white p-0.5"><img src={`${IMG_URL}/feder-icono.png`} alt="" className="size-full object-contain" /></span>
                     <span>
                         <strong className="text-texto">FEDER</strong> · Comunidades agrícolas de Santa Cruz · INF513 Grupo 28 · {new Date().getFullYear()}
                     </span>

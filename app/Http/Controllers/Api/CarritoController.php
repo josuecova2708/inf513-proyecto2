@@ -100,18 +100,13 @@ class CarritoController extends Controller
     /** Confirmar compra: reserva stock por lotes (FEFO + FOR UPDATE) y registra la entrega. */
     public function confirmar(Request $request): JsonResponse
     {
-        $d = $request->validate([
-            'tipo_entrega' => ['required', Rule::in(['recojo', 'envio'])],
-            'direccion' => ['nullable', 'required_if:tipo_entrega,envio', 'string', 'min:5', 'max:200'],
-            'referencia' => ['nullable', 'string', 'max:200'],
-            'fecha_programada' => ['nullable', 'date', 'after_or_equal:today'],
+        $e = PedidoServicio::reglasEntrega();
+        $d = $request->validate($e['reglas'] + [
             'nit_ci' => ['nullable', 'string', 'regex:/^\d{5,15}(-?[A-Za-z0-9]{1,3})?$/'],
             'razon_social' => ['nullable', 'required_with:nit_ci', 'string', 'max:120'],
-        ], [
-            'direccion.required_if' => 'Para envío a domicilio indique la dirección de entrega.',
+        ], $e['mensajes'] + [
             'nit_ci.regex' => 'El NIT/CI debe tener entre 5 y 15 dígitos.',
             'razon_social.required_with' => 'Indique la razón social para la factura.',
-            'fecha_programada.after_or_equal' => 'La fecha programada no puede ser anterior a hoy.',
         ]);
         $usuario = $request->user();
 
@@ -120,7 +115,7 @@ class CarritoController extends Controller
             DB::table('pedido')->where('id', $carrito)->update([
                 'nit_ci' => $d['nit_ci'] ?? null, 'razon_social' => $d['razon_social'] ?? null, 'fecha' => now(),
             ]);
-            PedidoServicio::reservarYEntregar($carrito, $d['tipo_entrega'], $d['direccion'] ?? null, $d['referencia'] ?? null, $d['fecha_programada'] ?? null);
+            PedidoServicio::reservarYEntregar($carrito, $d);
             PedidoServicio::recalcular($carrito);
             $numero = DB::table('pedido')->where('id', $carrito)->value('numero');
             NotificacionServicio::notificar($usuario->id, 'pedido_confirmado',

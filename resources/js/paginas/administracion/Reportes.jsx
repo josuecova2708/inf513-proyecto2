@@ -3,7 +3,7 @@ import { Download, Printer } from 'lucide-react';
 import api, { mensajeError } from '../../api/cliente';
 import { GraficoBarras, GraficoLineas } from '../../componentes/Graficos';
 import { Alerta, Cargando, Encabezado, Tarjeta, Vacio } from '../../componentes/ui';
-import { capitalizar, fecha, fechaHora, hoyISO, moneda, numero } from '../../utils/formato';
+import { etiquetaEstado, fecha, fechaHora, hoyISO, moneda, numero } from '../../utils/formato';
 
 const TIPOS = [
     ['ventas', 'Ventas por producto'],
@@ -20,7 +20,7 @@ const formatear = (col, v) => {
     if (v === null || v === undefined) return '—';
     if (esMonto(col)) return moneda(v);
     if (col === 'dia') return fecha(v);
-    if (col === 'estado') return capitalizar(v);
+    if (col === 'estado') return etiquetaEstado(v);
     if (typeof v === 'number' || (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v))) return numero(v);
     return v;
 };

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Services\EnvioServicio;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -40,16 +41,23 @@ class PedidosDemoSeeder extends Seeder
             ]);
 
             // Los más antiguos ya se entregaron; los últimos quedan en distintos estados del flujo
-            $estadoFinal = $i < 26 ? 'entregado' : ['confirmado', 'en_preparacion', 'listo_entrega', 'entregado', 'en_preparacion', 'confirmado'][$i - 26];
+            $estadoFinal = $i < 26 ? 'entregado' : ['confirmado', 'listo_entrega', 'listo_entrega', 'entregado', 'confirmado', 'confirmado'][$i - 26];
             if ($estadoFinal === 'confirmado') {
                 DB::table('pedido')->where('id', $pedidoId)->update(['estado' => 'confirmado', 'gestionado_por' => $personal]);
             } else {
                 DB::select('SELECT fn_confirmar_reservas(?, ?)', [$pedidoId, $personal]);
                 DB::table('pedido')->where('id', $pedidoId)->update(['estado' => $estadoFinal, 'gestionado_por' => $personal]);
             }
+            if ($estadoFinal === 'listo_entrega') {
+                // Entrega programada por el personal para los próximos días
+                DB::table('entrega')->where('pedido_id', $pedidoId)->update([
+                    'fecha_programada' => Carbon::today()->addDays(mt_rand(1, 3))->setTime([10, 15, 17][mt_rand(0, 2)], 0),
+                ]);
+            }
             if ($estadoFinal === 'entregado') {
                 DB::table('entrega')->where('pedido_id', $pedidoId)->update([
-                    'estado' => 'entregada', 'fecha_entrega' => $fecha->copy()->addDays(1), 'despachado_por' => $personal,
+                    'estado' => 'entregada', 'fecha_programada' => $fecha->copy()->addDays(1)->setTime(15, 0),
+                    'fecha_entrega' => $fecha->copy()->addDays(1)->setTime(15, mt_rand(0, 50)), 'despachado_por' => $personal,
                     'receptor' => 'Titular del pedido',
                 ]);
             }
@@ -120,7 +128,15 @@ class PedidosDemoSeeder extends Seeder
     {
         $id = (int) DB::selectOne("SELECT nextval(pg_get_serial_sequence('pedido','id')) AS id")->id;
         $subtotal = array_sum(array_map(fn ($it) => $it[0]->precio_venta * $it[1], $items));
-        $costoEnvio = $envio ? 15.00 : 0;
+        // Envíos: un punto aleatorio de Santa Cruz (hasta ~6 km de FEDER) con su costo por distancia
+        $lat = $lng = $km = null;
+        $costoEnvio = 0;
+        if ($envio) {
+            $lat = round(config('feder.origen.lat') + mt_rand(-450, 450) / 10000, 6);
+            $lng = round(config('feder.origen.lng') + mt_rand(-450, 450) / 10000, 6);
+            $km = EnvioServicio::distanciaKm($lat, $lng);
+            $costoEnvio = EnvioServicio::costo($km);
+        }
 
         DB::table('pedido')->insert([
             'id' => $id, 'numero' => 'PED-'.str_pad((string) $id, 6, '0', STR_PAD_LEFT), 'cliente_id' => $cliente,
@@ -134,7 +150,8 @@ class PedidosDemoSeeder extends Seeder
         $direccion = DB::table('usuario')->where('id', $cliente)->value('direccion');
         DB::table('entrega')->insert([
             'pedido_id' => $id, 'tipo' => $envio ? 'envio' : 'recojo', 'direccion' => $envio ? $direccion : null,
-            'fecha_programada' => $fecha->copy()->addDays(1),
+            'fecha_preferida' => $fecha->copy()->addDays(1)->toDateString(),
+            'latitud' => $lat, 'longitud' => $lng, 'distancia_km' => $km,
         ]);
 
         return $id;

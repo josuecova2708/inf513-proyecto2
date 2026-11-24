@@ -4,7 +4,7 @@ import api from '../../api/cliente';
 import { FiltroSelect, TablaDatos } from '../../componentes/Crud';
 import { Alerta, Encabezado, Insignia } from '../../componentes/ui';
 import useListado, { useAviso } from '../../hooks/useListado';
-import { capitalizar, fechaHora } from '../../utils/formato';
+import { etiquetaEstado, fechaHora } from '../../utils/formato';
 
 /** CU6: notificaciones al cliente dentro del sistema. */
 export default function Notificaciones() {
@@ -35,7 +35,7 @@ export default function Notificaciones() {
                 <TablaDatos listado={listado} vacio="No tienes notificaciones." columnas={[
                     { titulo: '', render: (n) => (!n.leida ? <span className="inline-block size-2.5 rounded-full bg-primario" aria-label="Sin leer" /> : null) },
                     { titulo: 'Fecha', render: (n) => <span className="whitespace-nowrap">{fechaHora(n.fecha_envio)}</span> },
-                    { titulo: 'Tipo', render: (n) => <Insignia color="info">{capitalizar(n.tipo)}</Insignia> },
+                    { titulo: 'Tipo', render: (n) => <Insignia color="info">{etiquetaEstado(n.tipo)}</Insignia> },
                     { titulo: 'Mensaje', render: (n) => <button type="button" className={`text-left ${n.leida ? 'text-suave' : 'font-medium'}`} onClick={() => leer(n)}>{n.mensaje}</button> },
                     { titulo: '', className: 'text-right', render: (n) => n.pedido_id && <Link to={`/panel/pedidos/${n.pedido_id}`} onClick={() => leer(n)} className="btn-fantasma btn-sm">Ver pedido</Link> },
                 ]} />

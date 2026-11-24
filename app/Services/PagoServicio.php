@@ -48,7 +48,7 @@ class PagoServicio
             'metodo_pago_usuario_id' => $tarjeta?->id, 'cuota_pago_id' => $cuotaId, 'registrado_por' => $usuario->id,
         ]);
 
-        $this->despuesDePago($pagoId, $r->estado, $usuario->id);
+        $this->despuesDePago($pagoId, $r->estado, $usuario->esStaff() ? $usuario->id : null); // el cliente que paga no "gestiona" el pedido
 
         return [$pagoId, $r];
     }

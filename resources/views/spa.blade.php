@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="FEDER - Productos de comunidades agrícolas de Santa Cruz, directo del productor a tu mesa.">
     <title>FEDER · Comercio de comunidades agrícolas</title>
-    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ asset('favicon.png') }}" type="image/png">
     <script>
         // Configuración en tiempo de ejecución: funciona igual en local y en la subcarpeta de tecnoweb
         window.FEDER = {
             basePath: @json(rtrim(request()->getBasePath(), '/')),
             apiUrl: @json(url('/api')),
             storageUrl: @json(asset('storage')),
+            imgUrl: @json(asset('img')),
+            ubicacion: @json(config('feder.origen')),
+            tarifaEnvio: @json(\App\Services\EnvioServicio::tarifa()),
         };
         // Aplica el tema guardado antes de pintar, para evitar parpadeo
         (function () {

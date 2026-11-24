@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, HandHeart, MapPinned, ShieldCheck, Truck } from 'lucide-react';
 import api from '../../api/cliente';
 import BuscadorGlobal from '../../componentes/BuscadorGlobal';
+import { LogoCompleto } from '../../layouts/PublicLayout';
 import ProductoTarjeta, { useAgregarAlCarrito } from '../../componentes/ProductoTarjeta';
 import { Alerta, Cargando } from '../../componentes/ui';
 
@@ -19,6 +20,7 @@ export default function Inicio() {
             <section className="border-b border-borde bg-gradient-to-br from-primario/15 via-fondo to-acento/15">
                 <div className="mx-auto grid max-w-7xl items-center gap-8 px-4 py-14 lg:grid-cols-2">
                     <div>
+                        <LogoCompleto className="mb-5" />
                         <p className="mb-2 font-semibold text-secundario">Federación de comunidades agrícolas · Santa Cruz</p>
                         <h1 className="text-4xl font-bold leading-tight sm:text-5xl">Productos frescos, directo de quienes los cultivan</h1>
                         <p className="mt-4 max-w-xl text-lg text-suave">

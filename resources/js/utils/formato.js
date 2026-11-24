@@ -15,19 +15,32 @@ export function fecha(v, conHora = false) {
 
 export const fechaHora = (v) => fecha(v, true);
 
-/** yyyy-mm-dd para inputs type="date" */
+/** yyyy-mm-dd (hora local, no UTC) para inputs type="date" */
 export function hoyISO(dias = 0) {
     const d = new Date();
     d.setDate(d.getDate() + dias);
-    return d.toISOString().slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "jue 26/11 · 15:00" para fechas de entrega programada */
+export function fechaEntrega(v) {
+    if (!v) return '—';
+    const d = new Date(String(v).replace(' ', 'T'));
+    if (Number.isNaN(d.getTime())) return '—';
+    const dia = d.toLocaleDateString('es-BO', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace(',', '');
+    return `${dia} · ${d.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 }
 
 export const capitalizar = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replaceAll('_', ' ') : '');
 
+/** Nombre visible de los estados que no se leen bien solo capitalizando */
+const ETIQUETA_ESTADO = { listo_entrega: 'Entrega programada', pedido_listo: 'Entrega programada' };
+export const etiquetaEstado = (s) => ETIQUETA_ESTADO[s] ?? capitalizar(s);
+
 /** Colores de insignia por estado (pedidos, pagos, entregas, producción, etc.) */
 export const COLOR_ESTADO = {
     activo: 'exito', activa: 'peligro', inactivo: 'suave', atendida: 'exito',
-    pendiente: 'aviso', confirmado: 'info', en_preparacion: 'info', listo_entrega: 'acento', entregado: 'exito', cancelado: 'peligro',
+    pendiente: 'aviso', confirmado: 'info', listo_entrega: 'acento', entregado: 'exito', cancelado: 'peligro',
     pagado: 'exito', rechazado: 'peligro', anulado: 'suave',
     en_camino: 'info', entregada: 'exito', fallida: 'peligro',
     reportada: 'aviso', validada: 'exito', rechazada: 'peligro',

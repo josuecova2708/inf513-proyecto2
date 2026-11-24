@@ -92,7 +92,7 @@ class CatalogoController extends Controller
             ->join('emprendimiento as e', 'e.id', '=', 'ep.emprendimiento_id')
             ->join('comunidad as co', 'co.id', '=', 'e.comunidad_id')
             ->where('ep.producto_id', $id)->where('e.estado', 'activo')
-            ->get(['e.id', 'e.nombre', 'co.nombre as comunidad', 'co.municipio', 'ep.temporada']);
+            ->get(['e.id', 'e.nombre', 'e.imagen', 'e.responsable', 'co.nombre as comunidad', 'co.municipio', 'ep.temporada']);
 
         return response()->json($producto);
     }

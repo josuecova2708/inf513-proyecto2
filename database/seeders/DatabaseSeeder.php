@@ -14,5 +14,9 @@ class DatabaseSeeder extends Seeder
             DatosDemoSeeder::class,
             PedidosDemoSeeder::class,
         ]);
+        // Las pruebas no deben tocar las imágenes reales de storage/app/public
+        if (! app()->runningUnitTests()) {
+            $this->call(ImagenesDemoSeeder::class);
+        }
     }
 }

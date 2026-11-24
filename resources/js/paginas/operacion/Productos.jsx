@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ImagePlus, LoaderCircle, Pencil, Plus, Trash2 } from 'lucide-react';
+import { LoaderCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import api, { urlImagen } from '../../api/cliente';
 import { BarraFiltros, FiltroSelect, TablaDatos } from '../../componentes/Crud';
 import { ImagenProducto } from '../../componentes/ProductoTarjeta';
+import SelectorImagen from '../../componentes/SelectorImagen';
 import { Alerta, Campo, Confirmar, Encabezado, Estado, Insignia, Modal } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import useFormulario from '../../hooks/useFormulario';
@@ -11,7 +12,6 @@ import { capitalizar, moneda, numero } from '../../utils/formato';
 import { numeroEn, seleccion, texto, textoOpcional, z } from '../../validacion/esquemas';
 
 const MODALIDADES = [{ value: 'ambas', label: 'Inmediata y por encargo' }, { value: 'inmediata', label: 'Solo venta inmediata' }, { value: 'encargo', label: 'Solo por encargo' }];
-const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
 
 const esquema = z.object({
     categoria_id: seleccion('una categoría'),
@@ -29,18 +29,6 @@ function FormProducto({ producto, categorias, onCerrar, onGuardado }) {
     const f = useFormulario(esquema, producto);
     const [archivo, setArchivo] = useState(null);
     const [quitar, setQuitar] = useState(false);
-    const [errorImagen, setErrorImagen] = useState('');
-    const vista = archivo ? URL.createObjectURL(archivo) : (!quitar && producto.imagen ? urlImagen(producto.imagen) : null);
-
-    const elegir = (e) => {
-        const a = e.target.files?.[0];
-        setErrorImagen('');
-        if (!a) return;
-        if (!TIPOS_IMAGEN.includes(a.type)) return setErrorImagen('La imagen debe ser JPG, PNG o WEBP.');
-        if (a.size > 2 * 1024 * 1024) return setErrorImagen('La imagen no puede pesar más de 2 MB.');
-        setArchivo(a);
-        setQuitar(false);
-    };
 
     const enviar = f.enviar(async (d) => {
         const fd = new FormData();
@@ -60,13 +48,13 @@ function FormProducto({ producto, categorias, onCerrar, onGuardado }) {
         }>
             <form id="form-producto" onSubmit={enviar} noValidate className="grid gap-4 sm:grid-cols-3">
                 {f.errorGeneral && <div className="sm:col-span-3"><Alerta tipo="error">{f.errorGeneral}</Alerta></div>}
-                <div className="space-y-2">
-                    <div className="tarjeta overflow-hidden">{vista ? <img src={vista} alt="Vista previa" className="h-40 w-full object-cover" /> : <ImagenProducto producto={{ ...producto, categoria: categorias.find((c) => String(c.id) === String(f.watch('categoria_id')))?.nombre }} />}</div>
-                    <label className="btn-secundario btn-sm w-full"><ImagePlus className="size-4" /> Elegir imagen<input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={elegir} /></label>
-                    {(vista || producto.imagen) && <button type="button" className="btn-fantasma btn-sm w-full" onClick={() => { setArchivo(null); setQuitar(true); }}>Quitar imagen</button>}
-                    {errorImagen && <p className="text-sm text-peligro">{errorImagen}</p>}
-                    <p className="text-xs text-suave">JPG, PNG o WEBP · máx. 2 MB</p>
-                </div>
+                <SelectorImagen
+                    actual={!quitar && producto.imagen ? urlImagen(producto.imagen) : null}
+                    archivo={archivo}
+                    onElegir={(a) => { setArchivo(a); setQuitar(false); }}
+                    onQuitar={() => { setArchivo(null); setQuitar(true); }}
+                    vacio={<ImagenProducto producto={{ ...producto, imagen: null, categoria: categorias.find((c) => String(c.id) === String(f.watch('categoria_id')))?.nombre }} />}
+                />
                 <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
                     <div className="sm:col-span-2"><Campo etiqueta="Nombre" requerido {...f.campo('nombre')} /></div>
                     <Campo etiqueta="Categoría" como="select" requerido opciones={[{ value: '', label: 'Seleccione…' }, ...categorias.map((c) => ({ value: String(c.id), label: c.nombre }))]} {...f.campo('categoria_id')} />

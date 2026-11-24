@@ -15,7 +15,7 @@ class PedidoController extends Controller
     public function index(Request $request): JsonResponse
     {
         $f = $request->validate([
-            'estado' => ['nullable', Rule::in(['pendiente', 'confirmado', 'en_preparacion', 'listo_entrega', 'entregado', 'cancelado'])],
+            'estado' => ['nullable', Rule::in(['pendiente', 'confirmado', 'listo_entrega', 'entregado', 'cancelado'])],
             'q' => ['nullable', 'string', 'max:80'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
@@ -76,8 +76,15 @@ class PedidoController extends Controller
 
     public function cambiarEstado(Request $request, int $id): JsonResponse
     {
-        $d = $request->validate(['estado' => ['required', Rule::in(array_keys(PedidoServicio::TRANSICIONES))]]);
-        $msg = DB::transaction(fn () => PedidoServicio::cambiarEstado(PedidoServicio::pedidoPara($id, $request->user()), $d['estado'], $request->user()));
+        $d = $request->validate([
+            'estado' => ['required', Rule::in(array_keys(PedidoServicio::TRANSICIONES))],
+            'fecha_programada' => ['nullable', 'required_if:estado,listo_entrega', 'date', 'after:now'],
+        ], [
+            'fecha_programada.required_if' => 'Indique la fecha y hora aproximada de la entrega.',
+            'fecha_programada.after' => 'La fecha y hora de entrega deben ser posteriores a este momento.',
+        ]);
+        $msg = DB::transaction(fn () => PedidoServicio::cambiarEstado(
+            PedidoServicio::pedidoPara($id, $request->user()), $d['estado'], $request->user(), $d['fecha_programada'] ?? null));
 
         return $this->mensaje($msg);
     }

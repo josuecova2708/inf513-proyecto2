@@ -31,7 +31,7 @@ class DashboardController extends Controller
                 'cobrado' => (float) DB::table('pago')->where('estado', 'pagado')->where('fecha', '>=', $desde)->sum('monto'),
                 'clientes' => DB::table('usuario as u')->join('rol as r', 'r.id', '=', 'u.rol_id')->where('r.nombre', 'Cliente')->where('u.estado', 'activo')->count(),
                 'productores' => DB::table('emprendimiento')->where('estado', 'activo')->count(),
-                'pedidos_por_atender' => DB::table('pedido')->whereIn('estado', ['confirmado', 'en_preparacion', 'listo_entrega'])->count(),
+                'pedidos_por_atender' => DB::table('pedido')->whereIn('estado', ['confirmado', 'listo_entrega'])->count(),
                 'pagos_por_verificar' => DB::table('pago')->where('estado', 'pendiente')->count(),
                 'produccion_por_validar' => DB::table('produccion')->where('estado', 'reportada')->count(),
                 'alertas_activas' => DB::table('alerta_inventario')->where('estado', 'activa')->count(),
@@ -105,7 +105,7 @@ class DashboardController extends Controller
                     ->get(['l.codigo', 'p.nombre as producto', 'l.stock_disponible', 'l.estado', 'l.fecha_vencimiento']);
             }
         } else {
-            $r['pedidos_por_atender'] = DB::table('pedido')->whereIn('estado', ['confirmado', 'en_preparacion', 'listo_entrega'])->count();
+            $r['pedidos_por_atender'] = DB::table('pedido')->whereIn('estado', ['confirmado', 'listo_entrega'])->count();
             $r['pagos_por_verificar'] = DB::table('pago')->where('estado', 'pendiente')->count();
             $r['produccion_por_validar'] = DB::table('produccion')->where('estado', 'reportada')->count();
             $r['alertas_activas'] = DB::table('alerta_inventario')->where('estado', 'activa')->count();

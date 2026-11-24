@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\ErrorNegocio;
 use App\Models\Pedido;
 use App\Models\Usuario;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,17 +17,37 @@ use Illuminate\Support\Facades\DB;
  */
 class PedidoServicio
 {
-    public const COSTO_ENVIO = 15.00;
-
     public const MINUTOS_RESERVA = 1440;
 
     /** Transiciones de estado permitidas: nuevo => estado actual requerido */
     public const TRANSICIONES = [
         'confirmado' => 'pendiente',
-        'en_preparacion' => 'confirmado',
-        'listo_entrega' => 'en_preparacion',
+        'listo_entrega' => 'confirmado',
         'entregado' => 'listo_entrega',
     ];
+
+    /** Reglas de validación de los datos de entrega (carrito y conversión de encargos). */
+    public static function reglasEntrega(): array
+    {
+        return [
+            'reglas' => [
+                'tipo_entrega' => ['required', 'in:recojo,envio'],
+                'direccion' => ['nullable', 'required_if:tipo_entrega,envio', 'string', 'min:5', 'max:200'],
+                'referencia' => ['nullable', 'string', 'max:200'],
+                'fecha_preferida' => ['nullable', 'date', 'after_or_equal:today'],
+                'latitud' => ['nullable', 'required_if:tipo_entrega,envio', 'numeric', 'between:-23,-9'],
+                'longitud' => ['nullable', 'required_if:tipo_entrega,envio', 'numeric', 'between:-70,-57'],
+            ],
+            'mensajes' => [
+                'direccion.required_if' => 'Para envío a domicilio indique la dirección de entrega.',
+                'fecha_preferida.after_or_equal' => 'La fecha preferida no puede ser anterior a hoy.',
+                'latitud.required_if' => 'Marque su ubicación en el mapa.',
+                'longitud.required_if' => 'Marque su ubicación en el mapa.',
+                'latitud.between' => 'La ubicación debe estar dentro de Bolivia.',
+                'longitud.between' => 'La ubicación debe estar dentro de Bolivia.',
+            ],
+        ];
+    }
 
     public static function nuevoPedido(int $clienteId, string $origen = 'inmediato', ?int $encargoId = null): int
     {
@@ -63,7 +84,7 @@ class PedidoServicio
             ->whereNotExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id'))
             ->orderBy('p.id')->value('p.id');
         if (! $id) {
-            return ['id' => null, 'detalles' => [], 'subtotal' => 0, 'costo_envio_referencial' => self::COSTO_ENVIO];
+            return ['id' => null, 'detalles' => [], 'subtotal' => 0, 'tarifa_envio' => EnvioServicio::tarifa()];
         }
         $pedido = DB::table('pedido')->where('id', $id)->first(['id', 'numero', 'subtotal']);
         $detalles = DB::table('detalle_pedido as dp')
@@ -74,7 +95,7 @@ class PedidoServicio
             ->get(['dp.producto_id', 'pr.nombre', 'pr.imagen', 'pr.presentacion', 'pr.unidad_medida', 'pr.estado', 'c.nombre as categoria',
                 'dp.cantidad', 'dp.precio_unitario', 'dp.subtotal', 'd.stock_disponible']);
 
-        return ['id' => $pedido->id, 'numero' => $pedido->numero, 'detalles' => $detalles, 'subtotal' => (float) $pedido->subtotal, 'costo_envio_referencial' => self::COSTO_ENVIO];
+        return ['id' => $pedido->id, 'numero' => $pedido->numero, 'detalles' => $detalles, 'subtotal' => (float) $pedido->subtotal, 'tarifa_envio' => EnvioServicio::tarifa()];
     }
 
     public static function validarProductoVendible(int $productoId): object
@@ -94,8 +115,11 @@ class PedidoServicio
     /**
      * Reserva el stock y registra la entrega. Primero verifica la disponibilidad para dar un mensaje claro;
      * fn_reservar_pedido (FOR UPDATE) es la defensa final ante compras simultáneas.
+     * En envíos el costo se calcula con la distancia de la ubicación marcada en el mapa.
+     *
+     * @param  array  $e  tipo_entrega, direccion, referencia, fecha_preferida, latitud, longitud
      */
-    public static function reservarYEntregar(int $pedidoId, string $tipo, ?string $direccion, ?string $referencia, ?string $fechaProgramada): void
+    public static function reservarYEntregar(int $pedidoId, array $e): void
     {
         $faltantes = [];
         $filas = DB::select(
@@ -118,21 +142,26 @@ class PedidoServicio
             throw new ErrorNegocio('No hay stock suficiente para confirmar: '.implode('; ', $faltantes).'. Ajuste las cantidades o haga un encargo.');
         }
 
-        DB::select('SELECT fn_reservar_pedido(?, ?)', [$pedidoId, self::MINUTOS_RESERVA]);
-
-        if ($tipo === 'envio') {
-            $direccion = $direccion ?: DB::table('pedido as p')->join('usuario as u', 'u.id', '=', 'p.cliente_id')->where('p.id', $pedidoId)->value('u.direccion');
+        $entrega = [
+            'pedido_id' => $pedidoId, 'tipo' => $e['tipo_entrega'], 'referencia' => $e['referencia'] ?? null,
+            'fecha_preferida' => $e['fecha_preferida'] ?? null,
+        ];
+        if ($e['tipo_entrega'] === 'envio') {
+            if (! isset($e['latitud'], $e['longitud'])) {
+                throw new ErrorNegocio('Para envío a domicilio marque su ubicación en el mapa.');
+            }
+            $km = EnvioServicio::distanciaKm((float) $e['latitud'], (float) $e['longitud']);
+            $costo = EnvioServicio::costo($km);
+            $direccion = ($e['direccion'] ?? null) ?: DB::table('pedido as p')->join('usuario as u', 'u.id', '=', 'p.cliente_id')->where('p.id', $pedidoId)->value('u.direccion');
             if (! $direccion) {
                 throw new ErrorNegocio('Para envío a domicilio indique la dirección de entrega.');
             }
-            DB::table('pedido')->where('id', $pedidoId)->update(['costo_envio' => self::COSTO_ENVIO]);
-        } else {
-            $direccion = null;
+            DB::table('pedido')->where('id', $pedidoId)->update(['costo_envio' => $costo]);
+            $entrega += ['direccion' => $direccion, 'latitud' => $e['latitud'], 'longitud' => $e['longitud'], 'distancia_km' => $km];
         }
-        DB::table('entrega')->insert([
-            'pedido_id' => $pedidoId, 'tipo' => $tipo, 'direccion' => $direccion, 'referencia' => $referencia,
-            'fecha_programada' => $fechaProgramada,
-        ]);
+
+        DB::select('SELECT fn_reservar_pedido(?, ?)', [$pedidoId, self::MINUTOS_RESERVA]);
+        DB::table('entrega')->insert($entrega);
     }
 
     /** Si el saldo llegó a 0 y el pedido estaba pendiente: pasa a CONFIRMADO y se notifica. */
@@ -145,7 +174,7 @@ class PedidoServicio
         }
         DB::update('UPDATE pedido SET estado = \'confirmado\', gestionado_por = COALESCE(gestionado_por, ?) WHERE id = ?', [$gestor, $pedidoId]);
         NotificacionServicio::notificar((int) $f->cliente_id, 'pedido_confirmado',
-            "Tu pedido {$f->numero} fue CONFIRMADO: el pago está completo y lo prepararemos pronto.", $pedidoId);
+            "Tu pedido {$f->numero} fue CONFIRMADO: el pago está completo. Te avisaremos la fecha y hora de entrega.", $pedidoId);
         // El plan de pagos (si existe) queda pagado
         DB::table('plan_pago')->where('pedido_id', $pedidoId)->update(['estado' => 'pagado']);
 
@@ -167,7 +196,7 @@ class PedidoServicio
         return $p;
     }
 
-    public static function cambiarEstado(Pedido $p, string $nuevo, Usuario $gestor): string
+    public static function cambiarEstado(Pedido $p, string $nuevo, Usuario $gestor, ?string $fechaProgramada = null): string
     {
         $esperado = self::TRANSICIONES[$nuevo] ?? null;
         if ($p->estado !== $esperado) {
@@ -182,17 +211,16 @@ class PedidoServicio
                 $saldo = (float) DB::table('v_saldo_pedido')->where('pedido_id', $p->id)->value('saldo_pendiente');
                 $extra = $saldo > 0 ? ' Atención: aún tiene saldo pendiente de Bs. '.number_format($saldo, 2).' (pago contra entrega).' : '';
                 break;
-            case 'en_preparacion':
-                // Convierte las reservas en salidas de inventario por lote y revisa el stock mínimo
-                DB::select('SELECT fn_confirmar_reservas(?, ?)', [$p->id, $gestor->id]);
-                $extra = ' Se registraron las salidas de inventario por lote.';
-                break;
             case 'listo_entrega':
+                // Programar la entrega: las reservas pasan a salidas de inventario por lote (y se revisa el stock mínimo)
+                if (! $fechaProgramada) {
+                    throw new ErrorNegocio('Indique la fecha y hora aproximada de la entrega.');
+                }
+                DB::select('SELECT fn_confirmar_reservas(?, ?)', [$p->id, $gestor->id]);
                 DB::table('pedido')->where('id', $p->id)->update(['estado' => 'listo_entrega']);
-                $en = DB::table('entrega')->where('pedido_id', $p->id)->first();
-                $como = $en->tipo === 'recojo' ? 'Puedes recogerlo en las oficinas de FEDER.' : "Será enviado a: {$en->direccion}.";
-                NotificacionServicio::notificar($p->cliente_id, 'pedido_listo', "Tu pedido {$p->numero} está LISTO PARA ENTREGA. {$como}", $p->id);
-                $extra = ' Se notificó al cliente.';
+                DB::table('entrega')->where('pedido_id', $p->id)->update(['fecha_programada' => $fechaProgramada]);
+                self::notificarProgramacion($p, $fechaProgramada);
+                $extra = ' Se registraron las salidas de inventario y se notificó al cliente.';
                 break;
             case 'entregado':
                 DB::table('pedido')->where('id', $p->id)->update(['estado' => 'entregado']);
@@ -223,9 +251,32 @@ class PedidoServicio
             .($cobrado > 0 ? ' Atención: tenía pagos confirmados por Bs. '.number_format($cobrado, 2).' que deben devolverse.' : '');
     }
 
+    /** Avisa al cliente cuándo (fecha y hora aproximada) se entrega o puede recoger su pedido. */
+    public static function notificarProgramacion(Pedido $p, string $fechaProgramada, bool $reprogramada = false): void
+    {
+        $en = DB::table('entrega')->where('pedido_id', $p->id)->first();
+        $cuando = self::fechaAmigable($fechaProgramada);
+        $texto = $en->tipo === 'recojo'
+            ? "Tu pedido {$p->numero} estará listo para recoger en las oficinas de FEDER desde el {$cuando}."
+            : "Tu pedido {$p->numero} se entregará el {$cuando} en: {$en->direccion}.";
+        NotificacionServicio::notificar($p->cliente_id, 'pedido_listo', ($reprogramada ? 'Entrega REPROGRAMADA. ' : '').$texto, $p->id);
+    }
+
+    /** "jue 26/11 aprox. a las 15:00" */
+    public static function fechaAmigable(string $fecha): string
+    {
+        $f = Carbon::parse($fecha);
+        $dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+
+        return $dias[$f->dayOfWeek].' '.$f->format('d/m').' aprox. a las '.$f->format('H:i');
+    }
+
     public static function etiqueta(string $estado): string
     {
-        return mb_strtoupper(str_replace('_', ' ', $estado));
+        return [
+            'pendiente' => 'PENDIENTE DE PAGO', 'confirmado' => 'CONFIRMADO', 'listo_entrega' => 'ENTREGA PROGRAMADA',
+            'entregado' => 'ENTREGADO', 'cancelado' => 'CANCELADO',
+        ][$estado] ?? mb_strtoupper(str_replace('_', ' ', $estado));
     }
 
     private static function num($v): string

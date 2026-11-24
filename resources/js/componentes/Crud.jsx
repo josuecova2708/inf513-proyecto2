@@ -52,13 +52,13 @@ export function TablaDatos({ listado, columnas, vacio = 'No hay registros para m
             <div className={`overflow-x-auto ${listado.cargando ? 'opacity-60' : ''}`}>
                 <table className="tabla">
                     <thead>
-                        <tr>{columnas.map((c) => <th key={c.titulo} scope="col" className={c.className}>{c.titulo}</th>)}</tr>
+                        <tr>{columnas.map((c, k) => <th key={`${k}-${c.titulo}`} scope="col" className={c.className}>{c.titulo}</th>)}</tr>
                     </thead>
                     <tbody>
                         {listado.datos.map((fila, i) => (
                             <tr key={fila[claveFila] ?? i}>
-                                {columnas.map((c) => (
-                                    <td key={c.titulo} className={c.className}>{c.render ? c.render(fila) : fila[c.campo] ?? '—'}</td>
+                                {columnas.map((c, k) => (
+                                    <td key={`${k}-${c.titulo}`} className={c.className}>{c.render ? c.render(fila) : fila[c.campo] ?? '—'}</td>
                                 ))}
                             </tr>
                         ))}

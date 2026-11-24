@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Eye, Pencil, Plus, Trash2 } from 'lucide-react';
-import api from '../../api/cliente';
+import { Eye, LoaderCircle, Pencil, Plus, Store, Trash2 } from 'lucide-react';
+import api, { mensajeError, urlImagen } from '../../api/cliente';
 import { BarraFiltros, FiltroSelect, FormularioModal, TablaDatos } from '../../componentes/Crud';
+import SelectorImagen from '../../componentes/SelectorImagen';
 import { Alerta, Cargando, Confirmar, Encabezado, Estado, Insignia, Modal } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import useListado, { useAviso } from '../../hooks/useListado';
@@ -24,6 +25,51 @@ const esquema = z.object({
     longitud: numeroEn('longitud', { min: -180, max: 180, opcional: true }),
     estado: z.enum(['activo', 'inactivo']),
 });
+
+/** Foto del emprendimiento: se sube apenas se elige (comprimida). Se muestra en "Producido por" del catálogo. */
+function FotoEmprendimiento({ emprendimiento, onCambio }) {
+    const { puede } = useAuth();
+    const [estado, setEstado] = useState({ ok: '', error: '', subiendo: false });
+    const editable = puede('emprendimientos', 'editar');
+    const vacio = (
+        <div className="flex h-40 flex-col items-center justify-center gap-1 bg-gradient-to-br from-primario/15 to-acento/20 text-suave">
+            <Store className="size-10" aria-hidden="true" /><span className="text-xs">Sin foto</span>
+        </div>
+    );
+    const subir = async (archivo) => {
+        setEstado({ ok: '', error: '', subiendo: true });
+        try {
+            const fd = new FormData();
+            fd.append('imagen', archivo);
+            const { data } = await api.post(`/emprendimientos/${emprendimiento.id}/imagen`, fd);
+            setEstado({ ok: data.message, error: '', subiendo: false });
+            onCambio();
+        } catch (e) {
+            setEstado({ ok: '', error: mensajeError(e), subiendo: false });
+        }
+    };
+    const quitar = async () => {
+        try {
+            const { data } = await api.delete(`/emprendimientos/${emprendimiento.id}/imagen`);
+            setEstado({ ok: data.message, error: '', subiendo: false });
+            onCambio();
+        } catch (e) {
+            setEstado({ ok: '', error: mensajeError(e), subiendo: false });
+        }
+    };
+    const actual = urlImagen(emprendimiento.imagen);
+    return (
+        <div className="space-y-2">
+            {editable
+                ? <SelectorImagen actual={actual} onElegir={subir} onQuitar={actual ? quitar : undefined} vacio={vacio} etiqueta={actual ? 'Cambiar foto' : 'Subir foto'} />
+                : <div className="tarjeta overflow-hidden">{actual ? <img src={actual} alt={`Foto de ${emprendimiento.nombre}`} className="h-40 w-full object-cover" /> : vacio}</div>}
+            {estado.subiendo && <p className="flex items-center gap-1 text-sm text-suave"><LoaderCircle className="size-4 animate-spin" /> Subiendo…</p>}
+            <Alerta tipo="exito">{estado.ok}</Alerta>
+            <Alerta tipo="error">{estado.error}</Alerta>
+            {editable && <p className="text-xs text-suave">Se muestra a los clientes en la ficha de cada producto que ofreces.</p>}
+        </div>
+    );
+}
 
 function Detalle({ id, onCerrar }) {
     const { puede } = useAuth();
@@ -60,13 +106,16 @@ function Detalle({ id, onCerrar }) {
         <Modal abierto titulo={d ? d.emprendimiento.nombre : 'Productor'} onCerrar={onCerrar} ancho="max-w-3xl">
             {!d ? <Cargando /> : (
                 <div className="space-y-5">
-                    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                    <div className="grid gap-5 sm:grid-cols-3">
+                    <FotoEmprendimiento emprendimiento={d.emprendimiento} onCambio={cargar} />
+                    <dl className="grid content-start gap-2 text-sm sm:col-span-2 sm:grid-cols-2">
                         <div><dt className="text-suave">Comunidad</dt><dd>{d.emprendimiento.comunidad?.nombre} · {d.emprendimiento.comunidad?.municipio}</dd></div>
                         <div><dt className="text-suave">Responsable</dt><dd>{d.emprendimiento.responsable}</dd></div>
                         <div><dt className="text-suave">Rubro</dt><dd>{capitalizar(d.emprendimiento.rubro)}</dd></div>
                         <div><dt className="text-suave">Cuenta vinculada</dt><dd>{d.emprendimiento.usuario ? `${d.emprendimiento.usuario.nombre} ${d.emprendimiento.usuario.apellido} (${d.emprendimiento.usuario.email})` : 'Sin cuenta'}</dd></div>
                         {d.emprendimiento.latitud && <div className="sm:col-span-2"><dt className="text-suave">Ubicación</dt><dd><a className="text-primario underline" target="_blank" rel="noreferrer" href={`https://www.openstreetmap.org/?mlat=${d.emprendimiento.latitud}&mlon=${d.emprendimiento.longitud}#map=13/${d.emprendimiento.latitud}/${d.emprendimiento.longitud}`}>{d.emprendimiento.latitud}, {d.emprendimiento.longitud} (ver mapa)</a></dd></div>}
                     </dl>
+                    </div>
                     <div>
                         <h3 className="mb-2 font-semibold">Productos que ofrece</h3>
                         <Alerta tipo="exito">{msg.ok}</Alerta>
@@ -184,7 +233,14 @@ export default function Emprendimientos() {
                     </BarraFiltros>
                 )}
                 <TablaDatos listado={listado} vacio={esStaff ? 'No hay productores.' : 'Tu cuenta no está vinculada a un emprendimiento.'} columnas={[
-                    { titulo: 'Emprendimiento', render: (e) => <><p className="font-medium">{e.nombre}</p><p className="text-xs text-suave">{e.responsable}{e.telefono ? ` · ${e.telefono}` : ''}</p></> },
+                    { titulo: 'Emprendimiento', render: (e) => (
+                        <div className="flex items-center gap-3">
+                            {e.imagen
+                                ? <img src={urlImagen(e.imagen)} alt="" className="size-10 shrink-0 rounded-full object-cover" loading="lazy" />
+                                : <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-superficie-2 text-suave"><Store className="size-5" aria-hidden="true" /></span>}
+                            <div><p className="font-medium">{e.nombre}</p><p className="text-xs text-suave">{e.responsable}{e.telefono ? ` · ${e.telefono}` : ''}</p></div>
+                        </div>
+                    ) },
                     { titulo: 'Comunidad', render: (e) => `${e.comunidad} · ${e.municipio}` },
                     { titulo: 'Rubro', render: (e) => <Insignia color="acento">{capitalizar(e.rubro)}</Insignia> },
                     { titulo: 'Productos', campo: 'productos', className: 'text-center' },

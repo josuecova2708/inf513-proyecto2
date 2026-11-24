@@ -165,11 +165,8 @@ class EncargoController extends Controller
     /** Convierte un encargo DISPONIBLE en pedido: precios vigentes, reserva de stock y entrega. */
     public function convertir(Request $request, int $id): JsonResponse
     {
-        $d = $request->validate([
-            'tipo_entrega' => ['required', Rule::in(['recojo', 'envio'])],
-            'direccion' => ['nullable', 'required_if:tipo_entrega,envio', 'string', 'min:5', 'max:200'],
-            'referencia' => ['nullable', 'string', 'max:200'],
-        ], ['direccion.required_if' => 'Para envío a domicilio indique la dirección de entrega.']);
+        $reglas = PedidoServicio::reglasEntrega();
+        $d = $request->validate($reglas['reglas'], $reglas['mensajes']);
         $u = $request->user();
 
         $pedidoId = DB::transaction(function () use ($d, $id, $u) {
@@ -182,7 +179,7 @@ class EncargoController extends Controller
                         SELECT ?, de.producto_id, de.cantidad, p.precio_venta FROM detalle_encargo de JOIN producto p ON p.id = de.producto_id
                          WHERE de.encargo_id = ?', [$pedido, $e->id]);
             PedidoServicio::recalcular($pedido);
-            PedidoServicio::reservarYEntregar($pedido, $d['tipo_entrega'], $d['direccion'] ?? null, $d['referencia'] ?? null, null);
+            PedidoServicio::reservarYEntregar($pedido, $d);
             PedidoServicio::recalcular($pedido);
             if ($u->esStaff()) {
                 DB::table('pedido')->where('id', $pedido)->update(['gestionado_por' => $u->id]);

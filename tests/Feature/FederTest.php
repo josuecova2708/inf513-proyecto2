@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -155,7 +157,79 @@ class FederTest extends TestCase
         $pedido = DB::table('pedido')->where('estado', 'confirmado')->value('id');
         $this->como('feder.personal@example.com');
         $this->putJson("/api/pedidos/{$pedido}/estado", ['estado' => 'entregado'])->assertStatus(422);
-        $this->putJson("/api/pedidos/{$pedido}/estado", ['estado' => 'en_preparacion'])->assertOk();
+        // Programar la entrega exige fecha y hora
+        $this->putJson("/api/pedidos/{$pedido}/estado", ['estado' => 'listo_entrega'])
+            ->assertStatus(422)->assertJsonPath('errors.fecha_programada.0', 'Indique la fecha y hora aproximada de la entrega.');
+        $cuando = now()->addDay()->setTime(15, 0)->format('Y-m-d H:i');
+        $this->putJson("/api/pedidos/{$pedido}/estado", ['estado' => 'listo_entrega', 'fecha_programada' => $cuando])->assertOk();
+        $this->assertSame('listo_entrega', DB::table('pedido')->where('id', $pedido)->value('estado'));
         $this->assertDatabaseHas('movimiento_inventario', ['tipo' => 'salida', 'motivo' => "Pedido {$pedido}"]);
+        $this->assertStringStartsWith($cuando, (string) DB::table('entrega')->where('pedido_id', $pedido)->value('fecha_programada'));
+        $this->assertStringContainsString('aprox. a las 15:00', DB::table('notificacion')->where('pedido_id', $pedido)->orderByDesc('id')->value('mensaje'));
+    }
+
+    public function test_imagen_de_producto_se_comprime_y_reemplaza(): void
+    {
+        Storage::fake('public');
+        $this->como('feder.personal@example.com');
+        $p = DB::table('producto')->where('nombre', 'Miel de abeja pura')->first();
+        $datos = (array) collect($p)->only(['categoria_id', 'nombre', 'descripcion', 'presentacion', 'unidad_medida', 'precio_venta', 'modalidad_venta', 'stock_minimo', 'estado'])->all();
+
+        $this->post("/api/productos/{$p->id}", $datos + ['imagen' => UploadedFile::fake()->image('miel.jpg', 3000, 2000)], ['Accept' => 'application/json'])->assertOk();
+        $primera = DB::table('producto')->where('id', $p->id)->value('imagen');
+        $this->assertStringEndsWith('.webp', $primera);
+        Storage::disk('public')->assertExists($primera);
+        [$ancho, $alto] = getimagesizefromstring(Storage::disk('public')->get($primera));
+        $this->assertSame([1000, 667], [$ancho, $alto]);
+
+        // Reemplazar borra la anterior
+        $this->post("/api/productos/{$p->id}", $datos + ['imagen' => UploadedFile::fake()->image('otra.png', 800, 800)], ['Accept' => 'application/json'])->assertOk();
+        Storage::disk('public')->assertMissing($primera);
+
+        // Un PDF no es una imagen
+        $this->post("/api/productos/{$p->id}", $datos + ['imagen' => UploadedFile::fake()->create('doc.pdf', 100, 'application/pdf')], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonPath('errors.imagen.0', 'La imagen debe ser JPG, PNG o WEBP.');
+    }
+
+    public function test_productor_solo_cambia_la_foto_de_su_emprendimiento(): void
+    {
+        Storage::fake('public');
+        $suyo = DB::table('emprendimiento')->where('nombre', 'Arrocera Los Angeles')->value('id');
+        $ajeno = DB::table('emprendimiento')->where('nombre', 'Apícola Flor del Monte')->value('id');
+        $this->como('productor.pedro@example.com');
+
+        $this->post("/api/emprendimientos/{$suyo}/imagen", ['imagen' => UploadedFile::fake()->image('campo.jpg', 1200, 900)], ['Accept' => 'application/json'])->assertOk();
+        Storage::disk('public')->assertExists(DB::table('emprendimiento')->where('id', $suyo)->value('imagen'));
+        $this->post("/api/emprendimientos/{$ajeno}/imagen", ['imagen' => UploadedFile::fake()->image('x.jpg')], ['Accept' => 'application/json'])->assertForbidden();
+
+        // La foto se ve en la ficha pública del producto
+        $arroz = DB::table('producto')->where('nombre', 'Arroz grano de oro')->value('id');
+        $this->assertNotNull(collect($this->getJson("/api/catalogo/{$arroz}")->json('productores'))->firstWhere('id', $suyo)['imagen']);
+    }
+
+    public function test_envio_exige_ubicacion_y_cobra_segun_distancia(): void
+    {
+        $this->como('cliente.carlos@example.com');
+        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id');
+        $base = ['tipo_entrega' => 'envio', 'direccion' => 'Av. Banzer 4to anillo'];
+
+        $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 1])->assertOk();
+        $this->postJson('/api/carrito/confirmar', $base)
+            ->assertStatus(422)->assertJsonPath('errors.latitud.0', 'Marque su ubicación en el mapa.');
+        // A ~60 km: fuera de la zona de envío
+        $this->postJson('/api/carrito/confirmar', $base + ['latitud' => -17.30, 'longitud' => -63.16])
+            ->assertStatus(422)->assertJsonFragment(['message' => 'La ubicación está fuera de la zona de envío (máx. 40 km de FEDER; la suya está a 69,4 km). Elija recojo en FEDER.']);
+
+        // Junto a FEDER: tarifa base
+        $cerca = $this->postJson('/api/carrito/confirmar', $base + ['latitud' => -17.7800, 'longitud' => -63.1640])->assertCreated()->json('pedido_id');
+        $this->assertEquals(10.0, (float) DB::table('pedido')->where('id', $cerca)->value('costo_envio'));
+        $this->assertDatabaseHas('entrega', ['pedido_id' => $cerca, 'latitud' => -17.78, 'longitud' => -63.164]);
+
+        // A unos 6 km en línea recta: cuesta más
+        $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 1])->assertOk();
+        $lejos = $this->postJson('/api/carrito/confirmar', $base + ['latitud' => -17.7260, 'longitud' => -63.1640])->assertCreated()->json('pedido_id');
+        $en = DB::table('entrega')->where('pedido_id', $lejos)->first();
+        $this->assertEqualsWithDelta(7.8, (float) $en->distancia_km, 0.2);
+        $this->assertEquals(24.5, (float) DB::table('pedido')->where('id', $lejos)->value('costo_envio'));
     }
 }
