@@ -29,6 +29,19 @@
  * - Server Page responde al formulario mediante «response» cuando falla validación.
  * - «redirect» para redirecciones entre páginas.
  * - Todas las cajas tienen el mismo color piel claro, una única instancia por elemento.
+ *
+ * Reglas del paper de Conallen (Modeling Web Application Architectures with UML) que se cumplen:
+ * - Cada «client page» la construye («build») UNA sola «Server Page».
+ * - Cada «form page» hace «submit» a UNA sola «Server Page» y pertenece a UNA sola página.
+ * - «link» siempre sale de una «client page».
+ * - Server Page -> recurso del servidor (Stripe): asociación simple, sin estereotipo.
+ * - Componentes que corren en el navegador (Stripe.js): clase «JavaScript» asociada a la página.
+ *
+ * Adaptación de WAE a una SPA (React + API REST):
+ * - «client page» = cada vista/ruta de React; «Server Page» = cada controlador de la API.
+ * - «build» = el controlador que entrega los datos principales con los que se arma la vista.
+ * - «link» = navegar a otra vista o una petición GET auxiliar (p. ej. llenar un combo).
+ * - «redirect» = navegar(...) del front después de una acción (login -> panel, etc.).
  */
 
 var COLOR_CAJA = 14740212;
@@ -41,12 +54,17 @@ var NOMBRE_RAIZ = "Diagramas de Navegación Web - FEDER";
 // "CUSTOM" = Custom Line con quiebres ortogonales estrictos
 var ESTILO_LINEA = "OR";
 
+// Modo apaisado en Doble Bloque (Izquierda: Público/Compra | Derecha: Panel/Pagos)
+// optimizado a proporción ~1.4:1 para entrar grande y legible en hoja Word Carta Horizontal
+var MODO_HORIZONTAL_CARTA = true;
+
 // Parámetros del motor de layout compacto por capas y ruteo ortogonal por pasillos
 var LAYOUT_CFG = {
     marginX: 40,
     marginY: 40,
-    gutterWidths: [75, 136, 94, 110, 94], // pasillos verticales ajustados entre columnas 0..5
-    bandGap: 42,       // separación vertical base entre módulos
+    gutterWidths: [75, 136, 94, 110, 94], // modo bloque simple (6 columnas)
+    dualGutterWidths: [56, 108, 82, 96, 128, 116, 82, 96], // modo doble bloque horizontal (9 columnas: 0..4 | pasillo central | 5..8)
+    bandGap: 36,       // separación vertical base entre módulos
     intraColGap: 26,   // separación vertical entre cajas apiladas de una misma banda
     trackSpacing: 11,  // separación entre carriles paralelos de líneas
     pairSpacing: 15,   // separación entre pares ida/vuelta (submit/response, link/build)
@@ -84,9 +102,9 @@ function main()
     selectedPackage.Packages.Refresh();
 
     crearDiagramaCliente(rootPkg);
-    // crearDiagramaProductor(rootPkg);
-    // crearDiagramaPersonal(rootPkg);
-    // crearDiagramaAdministrador(rootPkg);
+    crearDiagramaProductor(rootPkg);
+    crearDiagramaPersonal(rootPkg);
+    crearDiagramaAdministrador(rootPkg);
 
     Repository.RefreshModelView(rootPkg.PackageID);
 
@@ -291,8 +309,20 @@ function crearDiagramaCliente(rootPkg)
         2020, 1280, 300);
 
     // ---- Pago (QR / Transferencia / Efectivo / Tarjeta con Stripe) ----
-    pagina("frmPago", "form page",
+    // ModalPago es un solo componente de React, pero envía a dos endpoints distintos:
+    // se modela como dos formularios lógicos (pedido -> PagoController, cuota -> PlanPagoController).
+    pagina("frmPagoPedido", "form page",
         "metodo_pago_id\nmonto\ntarjeta_guardada\nreferencia\nbotón Pagar",
+        "",
+        1650, 1530, 280);
+
+    pagina("frmPagoCuota", "form page",
+        "metodo_pago_id\ntarjeta_guardada\nreferencia\nbotón Pagar Cuota",
+        "",
+        1650, 1530, 280);
+
+    pagina("frmPagoCuotaPlan", "form page",
+        "metodo_pago_id\ntarjeta_guardada\nreferencia\nbotón Pagar Cuota",
         "",
         1650, 1530, 280);
 
@@ -301,10 +331,17 @@ function crearDiagramaCliente(rootPkg)
         "index\nmetodos\npagar\nconfirmar",
         2020, 1570, 300);
 
+    // Servidor de Stripe (recurso externo del lado del servidor)
     pagina("StripeAPI", "Server Page",
-        "payment_method_id\nclient_secret\namount\ncurrency",
-        "confirmCardSetup\ncreatePaymentIntent\nhandleNextAction\nretrievePaymentIntent",
+        "customer\npayment_method_id\nclient_secret\namount\ncurrency",
+        "createSetupIntent\ncreatePaymentIntent\nretrievePaymentMethod\nretrievePaymentIntent",
         2400, 1280, 300);
+
+    // Stripe.js (corre en el navegador; la tarjeta va directo a Stripe, nunca a FEDER)
+    pagina("StripeJS", "JavaScript",
+        "cardElement\nclientSecret",
+        "confirmCardSetup\nhandleNextAction",
+        2400, 1280, 260);
 
     pagina("Stripe3DS", "client page",
         "banco_emisor\ncodigo_verificacion",
@@ -349,7 +386,7 @@ function crearDiagramaCliente(rootPkg)
         1300, 2180, 280);
 
     pagina("frmTarjetaStripe", "form page",
-        "alias\ncardElement\npredeterminado\nbotón Guardar Tarjeta",
+        "alias\ntitular\ncardElement\npredeterminado\nbotón Guardar Tarjeta",
         "",
         1650, 2140, 270);
 
@@ -359,7 +396,7 @@ function crearDiagramaCliente(rootPkg)
         1650, 2310, 270);
 
     pagina("MetodoPagoUsuarioController", "Server Page",
-        "alias\npayment_method_id\npredeterminado\nbanco\nnumero_cuenta",
+        "alias\ntitular\npayment_method_id\npredeterminado\nbanco\nnumero_cuenta",
         "index\nsetupIntent\nstore\nupdate\ndestroy",
         2020, 2180, 300);
 
@@ -377,10 +414,10 @@ function crearDiagramaCliente(rootPkg)
     composicion(map, "Inicio", "frmPreferencias");
     submit(map, "frmPreferencias", "AuthController");
 
-    // Login y registro
+    // Login y registro (el login solo devuelve el token; el front navega a /panel)
     composicion(map, "Login", "frmLogin");
     submit(map, "frmLogin", "AuthController");
-    build(map, "AuthController", "PanelCliente");
+    redirect(map, "AuthController", "PanelCliente");
     response(map, "AuthController", "frmLogin");
 
     composicion(map, "Registro", "frmRegistro");
@@ -398,9 +435,9 @@ function crearDiagramaCliente(rootPkg)
     submit(map, "frmAgregarCarrito", "CarritoController");
     response(map, "CarritoController", "frmAgregarCarrito");
 
+    // El encargo se registra y la vista se queda en el detalle con un mensaje (sin redirect)
     composicion(map, "ProductoDetalle", "frmEncargo");
     submit(map, "frmEncargo", "EncargoController");
-    redirect(map, "EncargoController", "Encargos");
     response(map, "EncargoController", "frmEncargo");
 
     // Carrito -> pedido
@@ -442,31 +479,44 @@ function crearDiagramaCliente(rootPkg)
     composicion(map, "PedidoDetalle", "frmCancelarPedido");
     submit(map, "frmCancelarPedido", "PedidoController");
 
-    // Plan de pagos (crédito en cuotas)
+    // Plan de pagos (crédito en cuotas). Tras crear el plan, la vista vuelve a pedir
+    // GET /pedidos/{id}: la sigue construyendo PedidoController (un solo build).
     composicion(map, "PedidoDetalle", "frmPlanPago");
     submit(map, "frmPlanPago", "PlanPagoController");
-    build(map, "PlanPagoController", "PedidoDetalle");
     response(map, "PlanPagoController", "frmPlanPago");
 
     link(map, "PlanesPago", "PlanPagoController");
     build(map, "PlanPagoController", "PlanesPago");
 
-    // Pago de pedido y de cuotas
-    composicion(map, "PedidoDetalle", "frmPago");
-    composicion(map, "PlanesPago", "frmPago");
-    submit(map, "frmPago", "PagoController");
-    submit(map, "frmPago", "PlanPagoController");
-    response(map, "PagoController", "frmPago");
-    build(map, "PagoController", "PedidoDetalle");
+    // Pago de pedido y de cuotas (un form por destino). El modal llena sus combos con
+    // GET /metodos-pago y GET /mis-metodos-pago: peticiones auxiliares = «link».
+    composicion(map, "PedidoDetalle", "frmPagoPedido");
+    submit(map, "frmPagoPedido", "PagoController");
+    response(map, "PagoController", "frmPagoPedido");
 
-    // Tarjeta con Stripe: PaymentIntent y, si el banco lo pide, 3D Secure
-    link(map, "PagoController", "StripeAPI");
-    link(map, "PlanPagoController", "StripeAPI");
+    composicion(map, "PedidoDetalle", "frmPagoCuota");
+    submit(map, "frmPagoCuota", "PlanPagoController");
+    response(map, "PlanPagoController", "frmPagoCuota");
+
+    composicion(map, "PlanesPago", "frmPagoCuotaPlan");
+    submit(map, "frmPagoCuotaPlan", "PlanPagoController");
+    response(map, "PlanPagoController", "frmPagoCuotaPlan");
+
+    link(map, "PedidoDetalle", "PagoController");
+    link(map, "PedidoDetalle", "MetodoPagoUsuarioController");
+    link(map, "PlanesPago", "MetodoPagoUsuarioController");
+
+    // Tarjeta con Stripe: el controlador crea el PaymentIntent en Stripe (servidor a servidor).
+    // Si el banco pide 3D Secure, Stripe.js (handleNextAction) muestra la página del banco
+    // y luego el front confirma con POST /pagos/{id}/confirmar.
+    asociacion(map, "PagoController", "StripeAPI");
+    asociacion(map, "PlanPagoController", "StripeAPI");
+    asociacion(map, "PedidoDetalle", "StripeJS");
     build(map, "StripeAPI", "Stripe3DS");
     redirect(map, "Stripe3DS", "PagoController");
 
-    // QR de FEDER
-    build(map, "PagoController", "PagoQR");
+    // QR de FEDER: tras registrar un pago por QR se muestra el QR activo (imagen de QrController)
+    redirect(map, "PagoController", "PagoQR");
     build(map, "QrController", "PagoQR");
 
     // Historial de pagos
@@ -488,19 +538,766 @@ function crearDiagramaCliente(rootPkg)
     redirect(map, "EncargoController", "PedidoDetalle");
     response(map, "EncargoController", "frmConvertirEncargo");
 
-    // Mis métodos de pago: la tarjeta la captura Stripe (nunca llega a FEDER)
+    // Mis métodos de pago: la tarjeta la captura Stripe.js (confirmCardSetup) y va directo
+    // a Stripe; el form solo envía a FEDER el alias, el titular y el pm_... resultante.
     link(map, "MisMetodosPago", "MetodoPagoUsuarioController");
     build(map, "MetodoPagoUsuarioController", "MisMetodosPago");
     composicion(map, "MisMetodosPago", "frmTarjetaStripe");
-    submit(map, "frmTarjetaStripe", "StripeAPI");
-    response(map, "StripeAPI", "frmTarjetaStripe");
     submit(map, "frmTarjetaStripe", "MetodoPagoUsuarioController");
-    link(map, "MetodoPagoUsuarioController", "StripeAPI");
+    response(map, "MetodoPagoUsuarioController", "frmTarjetaStripe");
+    asociacion(map, "frmTarjetaStripe", "StripeJS");
+    asociacion(map, "StripeJS", "StripeAPI");
+    asociacion(map, "MetodoPagoUsuarioController", "StripeAPI");
     composicion(map, "MisMetodosPago", "frmCuentaTransferencia");
     submit(map, "frmCuentaTransferencia", "MetodoPagoUsuarioController");
     response(map, "MetodoPagoUsuarioController", "frmCuentaTransferencia");
 
     finalizarDiagrama(ctx);
+}
+
+/* ============================================================
+   DIAGRAMA PRODUCTOR
+   La cuenta la crea FEDER (no hay registro público) y queda vinculada a un emprendimiento.
+   Solo lo propio del rol: lo común (catálogo, búsqueda, preferencias, perfil) ya está
+   en el diagrama del Cliente.
+   Panel (menú dinámico según permisos del rol Productor):
+   Comunidades (ver), Productores = su emprendimiento (ver/editar, foto, ofertas),
+   Producción (ver/reportar), Lotes (ver), Trazabilidad (ver), Notificaciones.
+   Flujos: reportar producción -> FEDER la valida (notificación "produccion_validada")
+   -> FEDER crea lotes -> el productor consulta sus lotes y la trazabilidad.
+   ============================================================ */
+
+function crearDiagramaProductor(rootPkg)
+{
+    // Con pocos módulos el doble bloque queda muy apaisado (~2.5:1); en un solo bloque
+    // vertical (~0.75:1) entra más grande en una hoja carta vertical.
+    var modoAnterior = MODO_HORIZONTAL_CARTA;
+    MODO_HORIZONTAL_CARTA = false;
+
+    var pkg = crearPaquete(rootPkg, "Navegación - Productor");
+    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Productor");
+    var ctx = crearContextoDiagrama(pkg, diagram);
+    var map = ctx.map;
+
+    // El motor calcula tamaños, columnas, bandas y rutas; no hace falta pasar x, y.
+    function pagina(name, stereotype, attrs, methods)
+    {
+        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
+        var alto = altoCaja(stereotype, attrs, methods);
+        return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
+    }
+
+    // ---- Base: actor + inicio + login (sin registro: la cuenta la crea FEDER) ----
+    // Lo común con el Cliente (catálogo, búsqueda, preferencias, perfil) ya está en su
+    // diagrama y se sobreentiende; aquí solo va lo propio del Productor.
+    crearActor(ctx, "Productor", 90, 100);
+
+    pagina("Inicio", "client page",
+        "menu",
+        "iniciarSesion\nirPanel");
+
+    pagina("Login", "client page",
+        "email\npassword",
+        "");
+
+    pagina("frmLogin", "form page",
+        "email\npassword\nbotón Iniciar Sesión",
+        "");
+
+    pagina("AuthController", "Server Page",
+        "email\npassword",
+        "login\nme\nlogout");
+
+    // ---- Panel del productor ----
+    pagina("PanelProductor", "client page",
+        "usuario\nmenu\nComunidades\nProductores\nProducción\nLotes\nTrazabilidad\nNotificaciones\nlotesRecientes",
+        "reportarProduccion\ncerrarSesion");
+
+    pagina("DashboardController", "Server Page",
+        "",
+        "resumenUsuario");
+
+    pagina("Notificaciones", "client page",
+        "notificaciones\nleida",
+        "leer\nleerTodas\nverProduccion");
+
+    pagina("NotificacionController", "Server Page",
+        "",
+        "index\nnoLeidas\nleer\nleerTodas");
+
+    // ---- Comunidades (solo lectura) ----
+    pagina("Comunidades", "client page",
+        "comunidades\nmunicipio\nprovincia\ndepartamento\nproductores",
+        "buscarComunidad\nlistarComunidad");
+
+    pagina("ComunidadController", "Server Page",
+        "q",
+        "index");
+
+    // ---- Mi emprendimiento (editar datos, foto y ofertas) ----
+    pagina("MisEmprendimientos", "client page",
+        "emprendimientos\ncomunidad\nrubro\nproductos\nestado",
+        "listarEmprendimiento\nverDetalle\neditarEmprendimiento");
+
+    pagina("frmEmprendimiento", "form page",
+        "nombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nbotón Guardar",
+        "");
+
+    pagina("EmprendimientoController", "Server Page",
+        "nombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nimagen\nproducto_id\nprecio_referencia\ntemporada",
+        "index\nshow\nupdate\nsubirImagen\nquitarImagen\nguardarOferta\neliminarOferta");
+
+    pagina("EmprendimientoDetalle", "client page",
+        "nombre\ncomunidad\nimagen\nofertas\nproducciones",
+        "subirFoto\nquitarFoto\nagregarOferta\nquitarOferta");
+
+    pagina("frmImagenEmprendimiento", "form page",
+        "imagen\nbotón Subir Foto",
+        "");
+
+    pagina("frmOferta", "form page",
+        "producto_id\nprecio_referencia\ntemporada\nbotón Agregar Oferta",
+        "");
+
+    pagina("ProductoController", "Server Page",
+        "estado",
+        "index");
+
+    // ---- Producción (reportar y seguir su validación) ----
+    pagina("Produccion", "client page",
+        "producciones\nestado\ntipo\nq",
+        "listarProduccion\nfiltrar\nreportarProduccion");
+
+    pagina("frmProduccion", "form page",
+        "producto_id\ntipo\ncantidad\nunidad_medida\nfecha_produccion\nfecha_disponible\nprecio_propuesto\nprocedencia\nobservacion\nbotón Reportar Producción",
+        "");
+
+    pagina("ProduccionController", "Server Page",
+        "producto_id\ntipo\ncantidad\nunidad_medida\nfecha_produccion\nfecha_disponible\nprecio_propuesto\nprocedencia\nobservacion",
+        "index\nstore");
+
+    // ---- Lotes y trazabilidad (solo lectura) ----
+    pagina("Lotes", "client page",
+        "lotes\ncodigo\nproducto\nstock_disponible\nfecha_vencimiento\nestado",
+        "listarLote\nfiltrar\nverTrazabilidad");
+
+    pagina("LoteController", "Server Page",
+        "estado\nproducto_id\nq\ncodigo\nnumero",
+        "index\ntrazabilidadLote\ntrazabilidadPedido");
+
+    pagina("Trazabilidad", "client page",
+        "lote\nproduccion\nemprendimiento\ncomunidad\npedidos",
+        "buscarLote\nbuscarPedido");
+
+    pagina("frmTrazabilidad", "form page",
+        "codigo_lote\nnumero_pedido\nbotón Buscar",
+        "");
+
+    // ---- Relaciones Productor ----
+    asociacionActor(map, "Productor", "Inicio");
+
+    // Inicio y login
+    link(map, "Inicio", "Login");
+    link(map, "Inicio", "PanelProductor");
+    composicion(map, "Login", "frmLogin");
+    submit(map, "frmLogin", "AuthController");
+    redirect(map, "AuthController", "PanelProductor");
+    response(map, "AuthController", "frmLogin");
+
+    // Panel
+    link(map, "PanelProductor", "DashboardController");
+    build(map, "DashboardController", "PanelProductor");
+    link(map, "PanelProductor", "Comunidades");
+    link(map, "PanelProductor", "MisEmprendimientos");
+    link(map, "PanelProductor", "Produccion");
+    link(map, "PanelProductor", "Lotes");
+    link(map, "PanelProductor", "Trazabilidad");
+    link(map, "PanelProductor", "Notificaciones");
+
+    // Notificaciones (p. ej. producción validada o rechazada)
+    link(map, "Notificaciones", "NotificacionController");
+    build(map, "NotificacionController", "Notificaciones");
+    link(map, "Notificaciones", "Produccion");
+
+    // Comunidades
+    link(map, "Comunidades", "ComunidadController");
+    build(map, "ComunidadController", "Comunidades");
+
+    // Mi emprendimiento
+    link(map, "MisEmprendimientos", "EmprendimientoController");
+    build(map, "EmprendimientoController", "MisEmprendimientos");
+    composicion(map, "MisEmprendimientos", "frmEmprendimiento");
+    submit(map, "frmEmprendimiento", "EmprendimientoController");
+    response(map, "EmprendimientoController", "frmEmprendimiento");
+    link(map, "MisEmprendimientos", "EmprendimientoDetalle");
+    build(map, "EmprendimientoController", "EmprendimientoDetalle");
+
+    composicion(map, "EmprendimientoDetalle", "frmImagenEmprendimiento");
+    submit(map, "frmImagenEmprendimiento", "EmprendimientoController");
+    response(map, "EmprendimientoController", "frmImagenEmprendimiento");
+
+    composicion(map, "EmprendimientoDetalle", "frmOferta");
+    submit(map, "frmOferta", "EmprendimientoController");
+    response(map, "EmprendimientoController", "frmOferta");
+    link(map, "EmprendimientoDetalle", "ProductoController"); // combo de productos (GET auxiliar)
+
+    // Producción
+    link(map, "Produccion", "ProduccionController");
+    build(map, "ProduccionController", "Produccion");
+    composicion(map, "Produccion", "frmProduccion");
+    submit(map, "frmProduccion", "ProduccionController");
+    response(map, "ProduccionController", "frmProduccion");
+    link(map, "Produccion", "ProductoController"); // combo de productos (GET auxiliar)
+
+    // Lotes y trazabilidad
+    link(map, "Lotes", "LoteController");
+    build(map, "LoteController", "Lotes");
+    link(map, "Lotes", "Trazabilidad");
+    composicion(map, "Trazabilidad", "frmTrazabilidad");
+    submit(map, "frmTrazabilidad", "LoteController");
+    build(map, "LoteController", "Trazabilidad");
+    response(map, "LoteController", "frmTrazabilidad");
+
+    finalizarDiagrama(ctx);
+    MODO_HORIZONTAL_CARTA = modoAnterior;
+}
+
+/* ============================================================
+   DIAGRAMA PERSONAL
+   Personal de FEDER: toda la operación del día a día.
+   Solo lo propio del rol (lo común: catálogo público, búsqueda, preferencias, perfil,
+   notificaciones, trazabilidad, foto/ofertas del emprendimiento y planes de pago ya
+   están en los diagramas del Cliente y del Productor).
+   Menú: Dashboard · Operación (Comunidades, Productores, Producción, Lotes) ·
+   Catálogo e inventario (Categorías, Productos, Inventario, Alertas) ·
+   Comercial (Encargos, Pedidos, Entregas) · Pagos · Análisis (Indicadores financieros, Reportes).
+   Flujos: valida la producción y crea lotes, ajusta inventario, gestiona encargos,
+   avanza el estado de los pedidos (programa la entrega), registra y verifica pagos
+   (efectivo, QR, transferencia) y despacha entregas.
+   ============================================================ */
+
+function crearDiagramaPersonal(rootPkg)
+{
+    var pkg = crearPaquete(rootPkg, "Navegación - Personal");
+    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Personal");
+    var ctx = crearContextoDiagrama(pkg, diagram);
+    var map = ctx.map;
+
+    function pagina(name, stereotype, attrs, methods)
+    {
+        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
+        var alto = altoCaja(stereotype, attrs, methods);
+        return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
+    }
+
+    // ---- Base: actor + inicio + login ----
+    crearActor(ctx, "Personal", 90, 100);
+
+    pagina("Inicio", "client page",
+        "menu",
+        "iniciarSesion\nirPanel");
+
+    pagina("Login", "client page",
+        "email\npassword",
+        "");
+
+    pagina("frmLogin", "form page",
+        "email\npassword\nbotón Iniciar Sesión",
+        "");
+
+    pagina("AuthController", "Server Page",
+        "email\npassword",
+        "login\nme\nlogout");
+
+    pagina("PanelPersonal", "client page",
+        "usuario\nmenu\nDashboard\nComunidades\nProductores\nProducción\nLotes\nCategorías\nProductos\nInventario\nAlertas\nEncargos\nPedidos\nEntregas\nPagos\nIndicadores financieros\nReportes",
+        "cerrarSesion");
+
+    // ---- Dashboard ----
+    pagina("Dashboard", "client page",
+        "ventasMes\npedidosPendientes\nstockBajo\nvisitas\ngraficos",
+        "verIndicadores");
+
+    pagina("DashboardController", "Server Page",
+        "",
+        "index");
+
+    // ---- Comunidades (CRUD) ----
+    pagina("Comunidades", "client page",
+        "comunidades\nq",
+        "buscarComunidad\ncrearComunidad\neditarComunidad\neliminarComunidad");
+
+    pagina("frmComunidad", "form page",
+        "nombre\nmunicipio\nprovincia\ndepartamento\ndescripcion\nbotón Guardar",
+        "");
+
+    pagina("ComunidadController", "Server Page",
+        "nombre\nmunicipio\nprovincia\ndepartamento\ndescripcion",
+        "index\nstore\nupdate\ndestroy");
+
+    // ---- Productores / emprendimientos (CRUD) ----
+    pagina("Emprendimientos", "client page",
+        "emprendimientos\nq\ncomunidad_id\nrubro\nestado",
+        "buscarProductor\ncrearProductor\neditarProductor\neliminarProductor");
+
+    pagina("frmEmprendimiento", "form page",
+        "comunidad_id\nusuario_id\nnombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nestado\nbotón Guardar",
+        "");
+
+    pagina("EmprendimientoController", "Server Page",
+        "comunidad_id\nusuario_id\nnombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nestado",
+        "index\nshow\nstore\nupdate\ndestroy");
+
+    // ---- Producción (validar) -> Lotes ----
+    pagina("Produccion", "client page",
+        "producciones\nestado\ntipo\nq",
+        "filtrar\nvalidarProduccion\ncrearLote");
+
+    pagina("frmValidarProduccion", "form page",
+        "estado\nobservacion\nbotón Validar\nbotón Rechazar",
+        "");
+
+    pagina("frmLote", "form page",
+        "codigo\ncantidad\nfecha_vencimiento\ncosto_unitario\nbotón Crear Lote",
+        "");
+
+    pagina("ProduccionController", "Server Page",
+        "estado\ntipo\nq\nobservacion",
+        "index\nvalidar\ndestroy");
+
+    pagina("Lotes", "client page",
+        "lotes\nestado\nproducto_id\nq",
+        "filtrar\neditarLote\najustarInventario");
+
+    pagina("frmEditarLote", "form page",
+        "fecha_vencimiento\ncosto_unitario\nestado\nbotón Guardar",
+        "");
+
+    pagina("frmMovimiento", "form page",
+        "tipo\ncantidad\nmotivo\nbotón Registrar Movimiento",
+        "");
+
+    pagina("LoteController", "Server Page",
+        "produccion_id\ncodigo\ncantidad\nfecha_vencimiento\ncosto_unitario\nestado\nversion",
+        "index\nstore\nupdate");
+
+    // ---- Catálogo (categorías y productos) ----
+    pagina("Categorias", "client page",
+        "categorias\nproductos_count",
+        "crearCategoria\neditarCategoria\neliminarCategoria");
+
+    pagina("frmCategoria", "form page",
+        "nombre\ndescripcion\nbotón Guardar",
+        "");
+
+    pagina("CategoriaController", "Server Page",
+        "nombre\ndescripcion",
+        "index\nstore\nupdate\ndestroy");
+
+    pagina("Productos", "client page",
+        "productos\nq\ncategoria_id\nestado",
+        "buscarProducto\ncrearProducto\neditarProducto\neliminarProducto");
+
+    pagina("frmProducto", "form page",
+        "categoria_id\nnombre\ndescripcion\npresentacion\nunidad_medida\nprecio_venta\nmodalidad_venta\nstock_minimo\nestado\nimagen\nbotón Guardar",
+        "");
+
+    pagina("ProductoController", "Server Page",
+        "categoria_id\nnombre\ndescripcion\npresentacion\nunidad_medida\nprecio_venta\nmodalidad_venta\nstock_minimo\nestado\nimagen",
+        "index\nstore\nupdate\ndestroy");
+
+    // ---- Inventario y alertas ----
+    pagina("Inventario", "client page",
+        "disponibilidad\nmovimientos\ntipo\ndesde\nhasta",
+        "verDisponibilidad\nverMovimientos");
+
+    pagina("InventarioController", "Server Page",
+        "lote_id\ntipo\ncantidad\nmotivo\ndesde\nhasta",
+        "disponibilidad\nmovimientos\nregistrarMovimiento");
+
+    pagina("Alertas", "client page",
+        "alertas\ntipo\nestado",
+        "filtrar\natenderAlerta");
+
+    pagina("frmAtenderAlerta", "form page",
+        "botón Marcar Atendida",
+        "");
+
+    pagina("AlertaController", "Server Page",
+        "estado\ntipo",
+        "index\natender");
+
+    // ---- Encargos ----
+    pagina("Encargos", "client page",
+        "encargos\ncliente\nestado",
+        "filtrar\naceptar\nrechazar\nmarcarDisponible");
+
+    pagina("frmEstadoEncargo", "form page",
+        "estado\nobservacion\nbotón Guardar",
+        "");
+
+    pagina("EncargoController", "Server Page",
+        "estado\nobservacion",
+        "index\nshow\ncambiarEstado");
+
+    // ---- Pedidos ----
+    pagina("Pedidos", "client page",
+        "pedidos\ncliente\nestado\nq\ndesde\nhasta",
+        "buscarPedido\nverPedido");
+
+    pagina("PedidoDetalle", "client page",
+        "numero\ncliente\nestado\ndetalle\nentrega\npagos\nsaldo",
+        "confirmar\nprogramarEntrega\nmarcarEntregado\ncancelar\nregistrarPago");
+
+    pagina("frmEstadoPedido", "form page",
+        "estado\nfecha_programada\nbotón Avanzar Estado",
+        "");
+
+    pagina("frmRegistrarPago", "form page",
+        "metodo_pago_id\nmonto\nreferencia\nbotón Registrar Pago",
+        "");
+
+    pagina("PedidoController", "Server Page",
+        "estado\nfecha_programada\nq\ndesde\nhasta",
+        "index\nshow\ncambiarEstado\ncancelar");
+
+    // ---- Pagos (verificar) ----
+    pagina("Pagos", "client page",
+        "pagos\ncliente\nmetodo\nestado\nq",
+        "filtrar\nverificarPago\nrechazarPago");
+
+    pagina("frmVerificarPago", "form page",
+        "estado\nbotón Confirmar\nbotón Rechazar",
+        "");
+
+    pagina("PagoController", "Server Page",
+        "metodo_pago_id\nmonto\nreferencia\nestado",
+        "index\npagar\nverificar");
+
+    // ---- Entregas ----
+    pagina("Entregas", "client page",
+        "entregas\ncliente\ntipo\ndireccion\nfecha_programada\nestado",
+        "filtrar\nverMapa\nreprogramar\nmarcarEntregada\nmarcarFallida");
+
+    pagina("frmEntrega", "form page",
+        "estado\nfecha_programada\nreceptor\nreferencia\nbotón Guardar",
+        "");
+
+    pagina("EntregaController", "Server Page",
+        "estado\ntipo\nfecha_programada\nreceptor\nreferencia",
+        "index\nupdate");
+
+    // ---- Análisis: indicadores financieros y reportes ----
+    pagina("Finanzas", "client page",
+        "ingresos\ncobrado\nporCobrar\nmargen\ngraficos",
+        "elegirRango");
+
+    pagina("frmRangoFechas", "form page",
+        "desde\nhasta\nbotón Aplicar",
+        "");
+
+    pagina("FinanzasController", "Server Page",
+        "desde\nhasta",
+        "indicadores");
+
+    pagina("Reportes", "client page",
+        "tipo\ntabla\ngrafico",
+        "elegirReporte\nexportarCSV\nimprimir");
+
+    pagina("frmFiltrosReporte", "form page",
+        "tipo\ndesde\nhasta\nbotón Generar\nbotón Exportar CSV\nbotón Imprimir",
+        "");
+
+    pagina("ReporteController", "Server Page",
+        "tipo\ndesde\nhasta",
+        "generar");
+
+    // ---- Relaciones Personal ----
+    asociacionActor(map, "Personal", "Inicio");
+
+    link(map, "Inicio", "Login");
+    link(map, "Inicio", "PanelPersonal");
+    composicion(map, "Login", "frmLogin");
+    submit(map, "frmLogin", "AuthController");
+    redirect(map, "AuthController", "PanelPersonal");
+    response(map, "AuthController", "frmLogin");
+
+    // Menú
+    link(map, "PanelPersonal", "Dashboard");
+    link(map, "PanelPersonal", "Comunidades");
+    link(map, "PanelPersonal", "Emprendimientos");
+    link(map, "PanelPersonal", "Produccion");
+    link(map, "PanelPersonal", "Lotes");
+    link(map, "PanelPersonal", "Categorias");
+    link(map, "PanelPersonal", "Productos");
+    link(map, "PanelPersonal", "Inventario");
+    link(map, "PanelPersonal", "Alertas");
+    link(map, "PanelPersonal", "Encargos");
+    link(map, "PanelPersonal", "Pedidos");
+    link(map, "PanelPersonal", "Entregas");
+    link(map, "PanelPersonal", "Pagos");
+    link(map, "PanelPersonal", "Finanzas");
+    link(map, "PanelPersonal", "Reportes");
+
+    // Dashboard
+    link(map, "Dashboard", "DashboardController");
+    build(map, "DashboardController", "Dashboard");
+
+    // Comunidades
+    link(map, "Comunidades", "ComunidadController");
+    build(map, "ComunidadController", "Comunidades");
+    composicion(map, "Comunidades", "frmComunidad");
+    submit(map, "frmComunidad", "ComunidadController");
+    response(map, "ComunidadController", "frmComunidad");
+
+    // Productores
+    link(map, "Emprendimientos", "EmprendimientoController");
+    build(map, "EmprendimientoController", "Emprendimientos");
+    composicion(map, "Emprendimientos", "frmEmprendimiento");
+    submit(map, "frmEmprendimiento", "EmprendimientoController");
+    response(map, "EmprendimientoController", "frmEmprendimiento");
+
+    // Producción: validar y crear lote
+    link(map, "Produccion", "ProduccionController");
+    build(map, "ProduccionController", "Produccion");
+    composicion(map, "Produccion", "frmValidarProduccion");
+    submit(map, "frmValidarProduccion", "ProduccionController");
+    response(map, "ProduccionController", "frmValidarProduccion");
+    // Tras crear el lote la vista de Producción solo recarga su lista (sin redirect)
+    composicion(map, "Produccion", "frmLote");
+    submit(map, "frmLote", "LoteController");
+    response(map, "LoteController", "frmLote");
+
+    // Lotes: editar y ajustar inventario
+    link(map, "Lotes", "LoteController");
+    build(map, "LoteController", "Lotes");
+    composicion(map, "Lotes", "frmEditarLote");
+    submit(map, "frmEditarLote", "LoteController");
+    response(map, "LoteController", "frmEditarLote");
+    composicion(map, "Lotes", "frmMovimiento");
+    submit(map, "frmMovimiento", "InventarioController");
+    response(map, "InventarioController", "frmMovimiento");
+
+    // Categorías y productos
+    link(map, "Categorias", "CategoriaController");
+    build(map, "CategoriaController", "Categorias");
+    composicion(map, "Categorias", "frmCategoria");
+    submit(map, "frmCategoria", "CategoriaController");
+    response(map, "CategoriaController", "frmCategoria");
+
+    link(map, "Productos", "ProductoController");
+    build(map, "ProductoController", "Productos");
+    composicion(map, "Productos", "frmProducto");
+    submit(map, "frmProducto", "ProductoController");
+    response(map, "ProductoController", "frmProducto");
+
+    // Inventario y alertas
+    link(map, "Inventario", "InventarioController");
+    build(map, "InventarioController", "Inventario");
+
+    link(map, "Alertas", "AlertaController");
+    build(map, "AlertaController", "Alertas");
+    composicion(map, "Alertas", "frmAtenderAlerta");
+    submit(map, "frmAtenderAlerta", "AlertaController");
+
+    // Encargos
+    link(map, "Encargos", "EncargoController");
+    build(map, "EncargoController", "Encargos");
+    composicion(map, "Encargos", "frmEstadoEncargo");
+    submit(map, "frmEstadoEncargo", "EncargoController");
+    response(map, "EncargoController", "frmEstadoEncargo");
+
+    // Pedidos: avanzar estado (pendiente -> confirmado -> listo_entrega -> entregado) y cobrar
+    link(map, "Pedidos", "PedidoController");
+    build(map, "PedidoController", "Pedidos");
+    link(map, "Pedidos", "PedidoDetalle");
+    build(map, "PedidoController", "PedidoDetalle");
+    composicion(map, "PedidoDetalle", "frmEstadoPedido");
+    submit(map, "frmEstadoPedido", "PedidoController");
+    response(map, "PedidoController", "frmEstadoPedido");
+    // Tras cobrar, la vista vuelve a pedir el pedido a PedidoController (un solo build);
+    // el combo de métodos sale de GET /metodos-pago (petición auxiliar = «link»).
+    composicion(map, "PedidoDetalle", "frmRegistrarPago");
+    submit(map, "frmRegistrarPago", "PagoController");
+    response(map, "PagoController", "frmRegistrarPago");
+    link(map, "PedidoDetalle", "PagoController");
+
+    // Pagos: verificar QR / transferencia
+    link(map, "Pagos", "PagoController");
+    build(map, "PagoController", "Pagos");
+    composicion(map, "Pagos", "frmVerificarPago");
+    submit(map, "frmVerificarPago", "PagoController");
+    link(map, "Pagos", "PedidoDetalle");
+
+    // Entregas
+    link(map, "Entregas", "EntregaController");
+    build(map, "EntregaController", "Entregas");
+    composicion(map, "Entregas", "frmEntrega");
+    submit(map, "frmEntrega", "EntregaController");
+    response(map, "EntregaController", "frmEntrega");
+    link(map, "Entregas", "PedidoDetalle");
+
+    // Indicadores financieros
+    link(map, "Finanzas", "FinanzasController");
+    build(map, "FinanzasController", "Finanzas");
+    composicion(map, "Finanzas", "frmRangoFechas");
+    submit(map, "frmRangoFechas", "FinanzasController");
+
+    // Reportes
+    composicion(map, "Reportes", "frmFiltrosReporte");
+    submit(map, "frmFiltrosReporte", "ReporteController");
+    build(map, "ReporteController", "Reportes");
+    response(map, "ReporteController", "frmFiltrosReporte");
+
+    finalizarDiagrama(ctx);
+}
+
+/* ============================================================
+   DIAGRAMA ADMINISTRADOR
+   Solo lo que el Personal NO tiene: gestionar usuarios, roles y matriz de permisos,
+   bitácora de auditoría y subir el QR de cobro de FEDER. Todo lo operativo
+   (producción, catálogo, pedidos, pagos, reportes...) lo hace igual que el Personal
+   (ver su diagrama), con el permiso extra de eliminar.
+   ============================================================ */
+
+function crearDiagramaAdministrador(rootPkg)
+{
+    // Pocos módulos: un solo bloque vertical entra más grande en la hoja.
+    var modoAnterior = MODO_HORIZONTAL_CARTA;
+    MODO_HORIZONTAL_CARTA = false;
+
+    var pkg = crearPaquete(rootPkg, "Navegación - Administrador");
+    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Administrador");
+    var ctx = crearContextoDiagrama(pkg, diagram);
+    var map = ctx.map;
+
+    function pagina(name, stereotype, attrs, methods)
+    {
+        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
+        var alto = altoCaja(stereotype, attrs, methods);
+        return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
+    }
+
+    // ---- Base: actor + inicio + login ----
+    crearActor(ctx, "Administrador", 90, 100);
+
+    pagina("Inicio", "client page",
+        "menu",
+        "iniciarSesion\nirPanel");
+
+    pagina("Login", "client page",
+        "email\npassword",
+        "");
+
+    pagina("frmLogin", "form page",
+        "email\npassword\nbotón Iniciar Sesión",
+        "");
+
+    pagina("AuthController", "Server Page",
+        "email\npassword",
+        "login\nme\nlogout");
+
+    pagina("PanelAdministrador", "client page",
+        "usuario\nmenu\nUsuarios\nRoles y permisos\nBitácora\nQR de cobro\nmódulos del Personal",
+        "cerrarSesion");
+
+    // ---- Usuarios (CRUD) ----
+    pagina("Usuarios", "client page",
+        "usuarios\nq\nrol_id\nestado",
+        "buscarUsuario\ncrearUsuario\neditarUsuario\neliminarUsuario");
+
+    pagina("frmUsuario", "form page",
+        "rol_id\nnombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nestado\nbotón Guardar",
+        "");
+
+    pagina("UsuarioController", "Server Page",
+        "rol_id\nnombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nestado",
+        "index\nshow\nstore\nupdate\ndestroy");
+
+    // ---- Roles y matriz de permisos ----
+    pagina("Roles", "client page",
+        "roles\nmodulos\nmatriz",
+        "elegirRol\nverMatriz\nmarcarPermiso");
+
+    pagina("frmMatrizPermisos", "form page",
+        "permiso_id\nver\ncrear\neditar\neliminar\nbotón Guardar Permisos",
+        "");
+
+    pagina("RolController", "Server Page",
+        "permisos",
+        "index\npermisos\nguardarPermisos");
+
+    // ---- Bitácora de auditoría ----
+    pagina("Bitacora", "client page",
+        "eventos\nresumen\npaginacion",
+        "filtrarEvento\npaginar");
+
+    pagina("frmFiltrosBitacora", "form page",
+        "accion\nq\nip\nrecurso\ndesde\nhasta\nbotón Filtrar",
+        "");
+
+    pagina("BitacoraController", "Server Page",
+        "accion\nq\nip\nrecurso\ndesde\nhasta",
+        "index\nresumen");
+
+    // ---- QR de cobro de FEDER ----
+    pagina("QrCobro", "client page",
+        "qrActivo\nhistorial",
+        "subirQr");
+
+    pagina("frmSubirQr", "form page",
+        "imagen\nbotón Subir QR",
+        "");
+
+    pagina("QrController", "Server Page",
+        "imagen",
+        "index\nstore\nimagen");
+
+    // ---- Relaciones Administrador ----
+    asociacionActor(map, "Administrador", "Inicio");
+
+    link(map, "Inicio", "Login");
+    link(map, "Inicio", "PanelAdministrador");
+    composicion(map, "Login", "frmLogin");
+    submit(map, "frmLogin", "AuthController");
+    redirect(map, "AuthController", "PanelAdministrador");
+    response(map, "AuthController", "frmLogin");
+
+    link(map, "PanelAdministrador", "Usuarios");
+    link(map, "PanelAdministrador", "Roles");
+    link(map, "PanelAdministrador", "Bitacora");
+    link(map, "PanelAdministrador", "QrCobro");
+
+    // Usuarios (el combo de roles sale de GET /roles: petición auxiliar = «link»)
+    link(map, "Usuarios", "UsuarioController");
+    build(map, "UsuarioController", "Usuarios");
+    composicion(map, "Usuarios", "frmUsuario");
+    submit(map, "frmUsuario", "UsuarioController");
+    response(map, "UsuarioController", "frmUsuario");
+    link(map, "Usuarios", "RolController");
+
+    // Roles y permisos
+    link(map, "Roles", "RolController");
+    build(map, "RolController", "Roles");
+    composicion(map, "Roles", "frmMatrizPermisos");
+    submit(map, "frmMatrizPermisos", "RolController");
+    response(map, "RolController", "frmMatrizPermisos");
+
+    // Bitácora
+    link(map, "Bitacora", "BitacoraController");
+    build(map, "BitacoraController", "Bitacora");
+    composicion(map, "Bitacora", "frmFiltrosBitacora");
+    submit(map, "frmFiltrosBitacora", "BitacoraController");
+
+    // QR de cobro
+    link(map, "QrCobro", "QrController");
+    build(map, "QrController", "QrCobro");
+    composicion(map, "QrCobro", "frmSubirQr");
+    submit(map, "frmSubirQr", "QrController");
+    response(map, "QrController", "frmSubirQr");
+
+    finalizarDiagrama(ctx);
+    MODO_HORIZONTAL_CARTA = modoAnterior;
 }
 
 /* ============================================================
@@ -633,6 +1430,10 @@ function crearDiagrama(pkg, name)
 {
     var diagram as EA.Diagram;
     diagram = pkg.Diagrams.AddNew(name, "Class");
+    if (MODO_HORIZONTAL_CARTA)
+    {
+        diagram.Orientation = "L";
+    }
     diagram.Update();
     pkg.Diagrams.Refresh();
     return diagram;
@@ -816,6 +1617,12 @@ function response(map, src, dst)
 function redirect(map, src, dst)
 {
     registrarConectorGrafo(map, src, dst, "Association", "redirect", "", "Source -> Destination", false, "redirect");
+}
+
+// Asociación simple sin estereotipo (Server Page -> recurso del servidor, página -> «JavaScript»)
+function asociacion(map, src, dst)
+{
+    registrarConectorGrafo(map, src, dst, "Association", "", "", "Unspecified", false, "asociacion");
 }
 
 function composicion(map, whole, part)
@@ -1036,6 +1843,12 @@ function calcularPosicionesGrafo(grafo)
         }
     }
 
+    // Componentes del navegador («JavaScript», p. ej. Stripe.js) -> Col 5 junto a los servicios externos
+    for (i = 0; i < N; i++)
+    {
+        if (nodes[i].stereotype == "JavaScript") nodes[i].col = 5;
+    }
+
     // Formularios regulares -> Col 3
     for (i = 0; i < N; i++)
     {
@@ -1057,7 +1870,8 @@ function calcularPosicionesGrafo(grafo)
             {
                 e = adjAll[i][j];
                 var oth = (e.src.id == i) ? e.dst : e.src;
-                if (e.dst.id == i && e.src.stereotype == "Server Page" && e.relKind == "link")
+                if (e.dst.id == i && e.src.stereotype == "Server Page" &&
+                    (e.relKind == "link" || e.relKind == "asociacion"))
                 {
                     linkedFromCtrl++;
                 }
@@ -1397,8 +2211,239 @@ function calcularPosicionesGrafo(grafo)
         })(rank);
     }
 
-    // 6. Coordenadas X por columna
-    var colMaxW = [90, 240, 240, 240, 260, 240];
+    // 6. Modo Doble Bloque Horizontal (Word Carta ~1.4:1) vs Bloque Único
+    var useDualWing = MODO_HORIZONTAL_CARTA && (B >= 5);
+    var numCols = useDualWing ? 9 : 6;
+    var splitRank = B;
+
+    if (useDualWing)
+    {
+        // Convertir nodos downstream de Col 5 (StripeAPI, 3DS, PagoQR, QrController) en sub-bandas compactas
+        // e insertarlas justo debajo de los controladores de pago con los que se conectan
+        var col5Srvs = [];
+        var col5Views = [];
+        var usedView5 = {};
+        for (i = 0; i < N; i++)
+        {
+            if (nodes[i].col == 5)
+            {
+                if (nodes[i].stereotype == "Server Page") col5Srvs.push(i);
+                else col5Views.push(i);
+            }
+        }
+
+        var auxBands = [];
+        for (i = 0; i < col5Srvs.length; i++)
+        {
+            var s5Id = col5Srvs[i];
+            var pairedViews = [];
+            for (j = 0; j < adjAll[s5Id].length; j++)
+            {
+                var oth5 = (adjAll[s5Id][j].src.id == s5Id) ? adjAll[s5Id][j].dst : adjAll[s5Id][j].src;
+                if (oth5.col == 5 && oth5.stereotype != "Server Page" && !usedView5[oth5.id])
+                {
+                    usedView5[oth5.id] = true;
+                    pairedViews.push(oth5.id);
+                }
+            }
+            auxBands.push({ ctrlId: s5Id, col2: [], col3: pairedViews, tier: 1, isAux5: true });
+        }
+        for (i = 0; i < col5Views.length; i++)
+        {
+            if (!usedView5[col5Views[i]])
+            {
+                auxBands.push({ ctrlId: -1, col2: [], col3: [col5Views[i]], tier: 1, isAux5: true });
+            }
+        }
+
+        // Insertar sub-bandas auxiliares justo después del último controlador conectado a ellas
+        if (auxBands.length > 0)
+        {
+            var maxConnRank = B - 1;
+            var bestAnchor = -1;
+            for (i = 0; i < auxBands.length; i++)
+            {
+                var ab = auxBands[i];
+                var abMembers = (ab.ctrlId != -1) ? [ab.ctrlId].concat(ab.col3) : ab.col3.slice(0);
+                for (var am = 0; am < abMembers.length; am++)
+                {
+                    var m5 = abMembers[am];
+                    for (j = 0; j < adjAll[m5].length; j++)
+                    {
+                        var nb5 = (adjAll[m5][j].src.id == m5) ? adjAll[m5][j].dst.id : adjAll[m5][j].src.id;
+                        if (nodeBand[nb5] != null && nodeBand[nb5] > bestAnchor)
+                        {
+                            bestAnchor = nodeBand[nb5];
+                        }
+                    }
+                }
+            }
+            if (bestAnchor >= 0) maxConnRank = bestAnchor;
+
+            var mergedBands = [];
+            for (rank = 0; rank < B; rank++)
+            {
+                mergedBands.push(orderedBands[rank]);
+                if (rank == maxConnRank)
+                {
+                    for (i = 0; i < auxBands.length; i++) mergedBands.push(auxBands[i]);
+                }
+            }
+            orderedBands = mergedBands;
+            B = orderedBands.length;
+            nodeBand = {};
+            for (rank = 0; rank < B; rank++)
+            {
+                if (orderedBands[rank].ctrlId != -1) nodeBand[orderedBands[rank].ctrlId] = rank;
+                for (j = 0; j < orderedBands[rank].col2.length; j++) nodeBand[orderedBands[rank].col2[j]] = rank;
+                for (j = 0; j < orderedBands[rank].col3.length; j++) nodeBand[orderedBands[rank].col3[j]] = rank;
+            }
+
+            // Reordenar internamente Col 2 y Col 3 ahora que StripeAPI / PagoQR ya tienen banda asignada
+            // (evita cruces como frmTarjetaStripe vs frmCuentaTransferencia)
+            for (rank = 0; rank < B; rank++)
+            {
+                var bnd2 = orderedBands[rank];
+                (function(rCur2) {
+                    bnd2.col2.sort(function(u, v) {
+                        return baricentroVecinos(u, rCur2, adjAll, nodeBand, secondaryHubs) -
+                               baricentroVecinos(v, rCur2, adjAll, nodeBand, secondaryHubs);
+                    });
+                    var c2Idx2 = {};
+                    for (var m2 = 0; m2 < bnd2.col2.length; m2++) c2Idx2[bnd2.col2[m2]] = m2;
+                    bnd2.col3.sort(function(u, v) {
+                        var ou = (compOwner[u] != null && c2Idx2[compOwner[u]] != null) ? c2Idx2[compOwner[u]] : 0.5;
+                        var ov = (compOwner[v] != null && c2Idx2[compOwner[v]] != null) ? c2Idx2[compOwner[v]] : 0.5;
+                        if (ou != ov) return ou - ov;
+                        return baricentroVecinos(u, rCur2, adjAll, nodeBand, secondaryHubs) -
+                               baricentroVecinos(v, rCur2, adjAll, nodeBand, secondaryHubs);
+                    });
+                })(rank);
+            }
+        }
+
+        // Balancear alturas reales de Bloque Izquierdo vs Bloque Derecho:
+        // Si al final del Bloque Derecho quedan módulos autónomos sin aristas hacia otras bandas (ej. MisEntregas),
+        // pasarlos al pie del Bloque Izquierdo cuando eso reduzca la altura máxima del diagrama!
+        var estBandH = [];
+        for (rank = 0; rank < B; rank++)
+        {
+            var eb = orderedBands[rank];
+            var h2 = 0;
+            var h3 = 0;
+            var h4 = (eb.ctrlId != -1) ? nodes[eb.ctrlId].h : 0;
+            for (j = 0; j < eb.col2.length; j++) h2 += nodes[eb.col2[j]].h + (j > 0 ? LAYOUT_CFG.intraColGap : 0);
+            for (j = 0; j < eb.col3.length; j++) h3 += nodes[eb.col3[j]].h + (j > 0 ? LAYOUT_CFG.intraColGap : 0);
+            estBandH.push(Math.max(h2, Math.max(h3, h4)) + LAYOUT_CFG.bandGap);
+        }
+
+        var bestSplitScore = 1e15;
+        splitRank = Math.floor(B / 2);
+        for (var sr = 2; sr <= B - 2; sr++)
+        {
+            var leftH = 0;
+            var rightH = 0;
+            for (i = 0; i < sr; i++) leftH += estBandH[i];
+            for (i = sr; i < B; i++) rightH += estBandH[i];
+
+            var cutPenalty = 0;
+            for (i = 0; i < edges.length; i++)
+            {
+                e = edges[i];
+                var rb1 = nodeBand[e.src.id];
+                var rb2 = nodeBand[e.dst.id];
+                if (rb1 != null && rb2 != null)
+                {
+                    if ((rb1 < sr && rb2 >= sr) || (rb2 < sr && rb1 >= sr))
+                    {
+                        cutPenalty += (e.relKind == "composicion") ? 600 : 85;
+                    }
+                }
+            }
+            var tierBonus = (orderedBands[sr - 1].tier == 0 && orderedBands[sr].tier != 0) ? -140 : 0;
+            var score = Math.max(leftH, rightH) + Math.abs(leftH - rightH) * 0.35 + cutPenalty + tierBonus;
+            if (score < bestSplitScore)
+            {
+                bestSplitScore = score;
+                splitRank = sr;
+            }
+        }
+
+        // Si el Bloque Derecho quedó más alto que el Izquierdo por >= 220px, mover módulos autónomos finales al pie del Bloque Izquierdo
+        var sumL = 0;
+        var sumR = 0;
+        for (i = 0; i < splitRank; i++) sumL += estBandH[i];
+        for (i = splitRank; i < B; i++) sumR += estBandH[i];
+
+        for (rank = B - 1; rank >= splitRank + 1; rank--)
+        {
+            if ((sumR - sumL) < 220) break;
+            var candB = orderedBands[rank];
+            if (candB.isAux5) continue;
+
+            // Verificar cuántas aristas tiene candB hacia otras bandas (excluyendo Hubs de Col 1/5)
+            var interEdges = 0;
+            var cMembers = (candB.ctrlId != -1) ? [candB.ctrlId].concat(candB.col2, candB.col3) : candB.col2.concat(candB.col3);
+            for (var cm = 0; cm < cMembers.length; cm++)
+            {
+                var cmId = cMembers[cm];
+                for (j = 0; j < adjAll[cmId].length; j++)
+                {
+                    var oId = (adjAll[cmId][j].src.id == cmId) ? adjAll[cmId][j].dst.id : adjAll[cmId][j].src.id;
+                    if (nodeBand[oId] != null && nodeBand[oId] != rank) interEdges++;
+                }
+            }
+            if (interEdges == 0)
+            {
+                var movedBand = orderedBands.splice(rank, 1)[0];
+                var movedH = estBandH.splice(rank, 1)[0];
+                orderedBands.splice(splitRank, 0, movedBand);
+                estBandH.splice(splitRank, 0, movedH);
+                splitRank++;
+                sumL += movedH;
+                sumR -= movedH;
+            }
+        }
+
+        nodeBand = {};
+        for (rank = 0; rank < B; rank++)
+        {
+            if (orderedBands[rank].ctrlId != -1) nodeBand[orderedBands[rank].ctrlId] = rank;
+            for (j = 0; j < orderedBands[rank].col2.length; j++) nodeBand[orderedBands[rank].col2[j]] = rank;
+            for (j = 0; j < orderedBands[rank].col3.length; j++) nodeBand[orderedBands[rank].col3[j]] = rank;
+        }
+
+        // Reasignar columnas del Bloque Derecho (Cols 5..8)
+        var hasSecondaryHub = false;
+        for (i = 0; i < N; i++)
+        {
+            if (isHub[i] && !inFromActor[i])
+            {
+                nodes[i].col = 5;
+                hasSecondaryHub = true;
+            }
+        }
+        for (i = 0; i < N; i++)
+        {
+            if (hubAttachment[i] != null && nodes[hubAttachment[i]].col == 5)
+            {
+                nodes[i].col = 5;
+            }
+        }
+        for (rank = splitRank; rank < B; rank++)
+        {
+            var rb = orderedBands[rank];
+            for (j = 0; j < rb.col2.length; j++) nodes[rb.col2[j]].col = 6;
+            for (j = 0; j < rb.col3.length; j++) nodes[rb.col3[j]].col = 7;
+            if (rb.ctrlId != -1) nodes[rb.ctrlId].col = 8;
+        }
+    }
+
+    // Calcular coordenadas X por columna
+    var colMaxW = useDualWing
+        ? [80, 230, 230, 236, 256, 0, 236, 236, 260]
+        : [90, 240, 240, 240, 260, 240];
+
     for (i = 0; i < N; i++)
     {
         if (nodes[i].w > colMaxW[nodes[i].col])
@@ -1406,230 +2451,276 @@ function calcularPosicionesGrafo(grafo)
             colMaxW[nodes[i].col] = nodes[i].w;
         }
     }
+
+    var gutters = useDualWing ? LAYOUT_CFG.dualGutterWidths : LAYOUT_CFG.gutterWidths;
     var colX = [LAYOUT_CFG.marginX];
-    for (var c = 1; c <= 5; c++)
+    for (var c = 1; c < numCols; c++)
     {
-        colX[c] = colX[c - 1] + colMaxW[c - 1] + LAYOUT_CFG.gutterWidths[c - 1];
+        if (colMaxW[c - 1] == 0)
+        {
+            colX[c] = colX[c - 1];
+        }
+        else
+        {
+            colX[c] = colX[c - 1] + colMaxW[c - 1] + gutters[c - 1];
+        }
     }
     for (i = 0; i < N; i++)
     {
         nodes[i].x = colX[nodes[i].col];
     }
 
-    // 7. Coordenadas Y por banda funcional con compactación Skyline (sin huecos muertos entre columnas)
-    var sky2 = LAYOUT_CFG.marginY - LAYOUT_CFG.bandGap;
-    var sky3 = LAYOUT_CFG.marginY - LAYOUT_CFG.bandGap;
-    var sky4 = LAYOUT_CFG.marginY - LAYOUT_CFG.bandGap;
+    // 7. Compactación Skyline independiente por Bloque (Izquierdo: 0..splitRank-1, Derecho: splitRank..B-1)
     var bandBounds = [];
-
-    for (rank = 0; rank < B; rank++)
+    function apilarRangoBandas(rStart, rEnd)
     {
-        var ob = orderedBands[rank];
+        var sky2 = LAYOUT_CFG.marginY - LAYOUT_CFG.bandGap;
+        var sky3 = LAYOUT_CFG.marginY - LAYOUT_CFG.bandGap;
+        var sky4 = LAYOUT_CFG.marginY - LAYOUT_CFG.bandGap;
+        var r, m;
 
-        // Calcular offsets relativos dentro de Col 2 para saber dónde arranca realmente el primer form de Col 3
-        var relY2 = {};
-        var acc2 = 0;
-        for (j = 0; j < ob.col2.length; j++)
+        for (r = rStart; r < rEnd; r++)
         {
-            relY2[ob.col2[j]] = acc2;
-            acc2 += nodes[ob.col2[j]].h + LAYOUT_CFG.intraColGap;
-        }
-
-        var topPageConnectsCtrl = false;
-        if (ob.col3.length > 0 && ob.ctrlId != -1 && ob.col2.length > 0)
-        {
-            var topC2 = ob.col2[0];
-            for (j = 0; j < edges.length; j++)
+            var ob = orderedBands[r];
+            var relY2 = {};
+            var acc2 = 0;
+            for (m = 0; m < ob.col2.length; m++)
             {
-                e = edges[j];
-                if ((e.src.id == ob.ctrlId && e.dst.id == topC2) || (e.dst.id == ob.ctrlId && e.src.id == topC2))
+                relY2[ob.col2[m]] = acc2;
+                acc2 += nodes[ob.col2[m]].h + LAYOUT_CFG.intraColGap;
+            }
+
+            var topPageConnectsCtrl = false;
+            if (ob.col3.length > 0 && ob.ctrlId != -1 && ob.col2.length > 0)
+            {
+                var topC2 = ob.col2[0];
+                for (m = 0; m < edges.length; m++)
                 {
-                    topPageConnectsCtrl = true;
-                    break;
+                    var ed = edges[m];
+                    if ((ed.src.id == ob.ctrlId && ed.dst.id == topC2) || (ed.dst.id == ob.ctrlId && ed.src.id == topC2))
+                    {
+                        topPageConnectsCtrl = true;
+                        break;
+                    }
                 }
             }
-        }
 
-        var relStart3 = topPageConnectsCtrl ? 42 : 0;
-        if (ob.col3.length > 0)
-        {
-            var firstOwner = compOwner[ob.col3[0]];
-            if (firstOwner != null && nodeBand[firstOwner] == rank && relY2[firstOwner] != null && relY2[firstOwner] > relStart3)
+            var relStart3 = topPageConnectsCtrl ? 42 : 0;
+            if (ob.col3.length > 0)
             {
-                relStart3 = relY2[firstOwner];
+                var firstOwner = compOwner[ob.col3[0]];
+                if (firstOwner != null && nodeBand[firstOwner] == r && relY2[firstOwner] != null && relY2[firstOwner] > relStart3)
+                {
+                    relStart3 = relY2[firstOwner];
+                }
             }
-        }
 
-        // Skyline: cada banda sube hasta tocar el tope real libre de sus columnas participantes
-        var reqStart = LAYOUT_CFG.marginY;
-        if (ob.col2.length > 0 && (sky2 + LAYOUT_CFG.bandGap) > reqStart)
-        {
-            reqStart = sky2 + LAYOUT_CFG.bandGap;
-        }
-        if (ob.ctrlId != -1 && (sky4 + LAYOUT_CFG.bandGap) > reqStart)
-        {
-            reqStart = sky4 + LAYOUT_CFG.bandGap;
-        }
-        if (ob.col3.length > 0 && (sky3 + LAYOUT_CFG.bandGap - relStart3) > reqStart)
-        {
-            reqStart = sky3 + LAYOUT_CFG.bandGap - relStart3;
-        }
-
-        var curY = reqStart;
-        var y2 = curY;
-        for (j = 0; j < ob.col2.length; j++)
-        {
-            var n2 = nodes[ob.col2[j]];
-            n2.y = y2;
-            y2 += n2.h + LAYOUT_CFG.intraColGap;
-        }
-        if (ob.col2.length > 0)
-        {
-            y2 -= LAYOUT_CFG.intraColGap;
-            if (y2 > sky2) sky2 = y2;
-        }
-
-        var y3 = curY + relStart3;
-        for (j = 0; j < ob.col3.length; j++)
-        {
-            var n3 = nodes[ob.col3[j]];
-            n3.y = y3;
-            y3 += n3.h + LAYOUT_CFG.intraColGap;
-        }
-        if (ob.col3.length > 0)
-        {
-            y3 -= LAYOUT_CFG.intraColGap;
-            if (y3 > sky3) sky3 = y3;
-        }
-
-        var y4 = curY;
-        if (ob.ctrlId != -1)
-        {
-            var n4 = nodes[ob.ctrlId];
-            var spanBot = Math.max(ob.col2.length > 0 ? y2 : curY, ob.col3.length > 0 ? y3 : curY);
-            if (!topPageConnectsCtrl && (spanBot - curY) > (n4.h + 30))
+            var reqStart = LAYOUT_CFG.marginY;
+            if (ob.col2.length > 0 && (sky2 + LAYOUT_CFG.bandGap) > reqStart)
             {
-                n4.y = Math.round(curY + (spanBot - curY - n4.h) / 2);
-                if (n4.y < (sky4 + LAYOUT_CFG.bandGap)) n4.y = sky4 + LAYOUT_CFG.bandGap;
+                reqStart = sky2 + LAYOUT_CFG.bandGap;
             }
-            else
+            if (ob.ctrlId != -1 && (sky4 + LAYOUT_CFG.bandGap) > reqStart)
             {
-                n4.y = curY;
+                reqStart = sky4 + LAYOUT_CFG.bandGap;
             }
-            y4 = n4.y + n4.h;
-            if (y4 > sky4) sky4 = y4;
-        }
+            if (ob.col3.length > 0 && (sky3 + LAYOUT_CFG.bandGap - relStart3) > reqStart)
+            {
+                reqStart = sky3 + LAYOUT_CFG.bandGap - relStart3;
+            }
+            // Si la primera vista de Col 2 habla directo con su controlador en Col 4, no dejar que un form
+            // largo de la banda anterior (sky3) cuelgue en medio y bloquee su línea recta horizontal!
+            if (ob.col2.length > 0 && ob.ctrlId != -1 && (sky3 + 18) > reqStart)
+            {
+                for (m = 0; m < edges.length; m++)
+                {
+                    var edDirect = edges[m];
+                    if ((edDirect.src.id == ob.ctrlId && edDirect.dst.id == ob.col2[0]) ||
+                        (edDirect.dst.id == ob.ctrlId && edDirect.src.id == ob.col2[0]))
+                    {
+                        reqStart = sky3 + 18;
+                        break;
+                    }
+                }
+            }
 
-        var bandBot = Math.max(y2, Math.max(y3, y4));
-        bandBounds.push({ top: curY, bottom: bandBot });
+            var curY = reqStart;
+            var y2 = curY;
+            for (m = 0; m < ob.col2.length; m++)
+            {
+                var n2 = nodes[ob.col2[m]];
+                n2.y = y2;
+                y2 += n2.h + LAYOUT_CFG.intraColGap;
+            }
+            if (ob.col2.length > 0)
+            {
+                y2 -= LAYOUT_CFG.intraColGap;
+                if (y2 > sky2) sky2 = y2;
+            }
+
+            var y3 = curY + relStart3;
+            for (m = 0; m < ob.col3.length; m++)
+            {
+                var n3 = nodes[ob.col3[m]];
+                n3.y = y3;
+                y3 += n3.h + LAYOUT_CFG.intraColGap;
+            }
+            if (ob.col3.length > 0)
+            {
+                y3 -= LAYOUT_CFG.intraColGap;
+                if (y3 > sky3) sky3 = y3;
+            }
+
+            var y4 = curY;
+            if (ob.ctrlId != -1)
+            {
+                var n4 = nodes[ob.ctrlId];
+                var spanBot = Math.max(ob.col2.length > 0 ? y2 : curY, ob.col3.length > 0 ? y3 : curY);
+                if (!topPageConnectsCtrl && (spanBot - curY) > (n4.h + 30))
+                {
+                    n4.y = Math.round(curY + (spanBot - curY - n4.h) / 2);
+                    if (n4.y < (sky4 + LAYOUT_CFG.bandGap)) n4.y = sky4 + LAYOUT_CFG.bandGap;
+                }
+                else
+                {
+                    n4.y = curY;
+                }
+                y4 = n4.y + n4.h;
+                if (y4 > sky4) sky4 = y4;
+            }
+
+            var bandBot = Math.max(y2, Math.max(y3, y4));
+            bandBounds.push({ top: curY, bottom: bandBot });
+        }
     }
 
-    // 8. Posicionar Col 5 alineada al centro ponderado de sus vecinos en Col 3 y Col 4
-    var col5Nodes = [];
-    for (i = 0; i < N; i++)
+    if (useDualWing)
     {
-        if (nodes[i].col == 5) col5Nodes.push(nodes[i]);
+        apilarRangoBandas(0, splitRank);
+        apilarRangoBandas(splitRank, B);
     }
-    var desiredY5 = {};
-    for (var pass5 = 0; pass5 < 4; pass5++)
+    else
     {
+        apilarRangoBandas(0, B);
+    }
+
+    // 8. Posicionar Col 5 solo cuando está en modo Bloque Único (en Doble Bloque ya fueron integradas en Cols 7 y 8)
+    if (!useDualWing)
+    {
+        var col5Nodes = [];
+        for (i = 0; i < N; i++)
+        {
+            if (nodes[i].col == 5) col5Nodes.push(nodes[i]);
+        }
+        var desiredY5 = {};
+        for (var pass5 = 0; pass5 < 4; pass5++)
+        {
+            for (i = 0; i < col5Nodes.length; i++)
+            {
+                var n5 = col5Nodes[i];
+                var sumY = 0;
+                var cntY = 0;
+                for (j = 0; j < adjAll[n5.id].length; j++)
+                {
+                    var nbNode = (adjAll[n5.id][j].src.id == n5.id) ? adjAll[n5.id][j].dst : adjAll[n5.id][j].src;
+                    if (nbNode.col < 5)
+                    {
+                        sumY += 2 * (nbNode.y + nbNode.h / 2);
+                        cntY += 2;
+                    }
+                    else if (desiredY5[nbNode.id] != null)
+                    {
+                        sumY += (desiredY5[nbNode.id] + nbNode.h / 2 + 80);
+                        cntY += 1;
+                    }
+                }
+                desiredY5[n5.id] = (cntY > 0) ? (sumY / cntY - n5.h / 2) : LAYOUT_CFG.marginY;
+            }
+        }
+        col5Nodes.sort(function(a, b) { return desiredY5[a.id] - desiredY5[b.id]; });
+
+        var prevBot5 = LAYOUT_CFG.marginY;
         for (i = 0; i < col5Nodes.length; i++)
         {
-            var n5 = col5Nodes[i];
-            var sumY = 0;
-            var cntY = 0;
-            for (j = 0; j < adjAll[n5.id].length; j++)
-            {
-                var nbNode = (adjAll[n5.id][j].src.id == n5.id) ? adjAll[n5.id][j].dst : adjAll[n5.id][j].src;
-                if (nbNode.col < 5)
-                {
-                    sumY += 2 * (nbNode.y + nbNode.h / 2);
-                    cntY += 2;
-                }
-                else if (desiredY5[nbNode.id] != null)
-                {
-                    sumY += (desiredY5[nbNode.id] + nbNode.h / 2 + 80);
-                    cntY += 1;
-                }
-            }
-            desiredY5[n5.id] = (cntY > 0) ? (sumY / cntY - n5.h / 2) : LAYOUT_CFG.marginY;
+            var targetY5 = Math.max(prevBot5, Math.round(desiredY5[col5Nodes[i].id]));
+            col5Nodes[i].y = targetY5;
+            prevBot5 = targetY5 + col5Nodes[i].h + 28;
         }
     }
-    col5Nodes.sort(function(a, b) { return desiredY5[a.id] - desiredY5[b.id]; });
 
-    var prevBot5 = LAYOUT_CFG.marginY;
-    for (i = 0; i < col5Nodes.length; i++)
+    // 9. Posicionar Hubs (Col 1 en Bloque Izquierdo, Col 5 en Bloque Derecho) frente a las vistas de su propio bloque
+    var hubColsList = useDualWing ? [1, 5] : [1];
+    for (var hcIdx = 0; hcIdx < hubColsList.length; hcIdx++)
     {
-        var targetY5 = Math.max(prevBot5, Math.round(desiredY5[col5Nodes[i].id]));
-        col5Nodes[i].y = targetY5;
-        prevBot5 = targetY5 + col5Nodes[i].h + 28;
-    }
-
-    // 9. Posicionar Col 1 (Hubs + sus auxiliares exclusivos arriba/abajo)
-    var hubGroups = [];
-    for (i = 0; i < N; i++)
-    {
-        if (isHub[i])
+        var hCol = hubColsList[hcIdx];
+        var hubGroups = [];
+        for (i = 0; i < N; i++)
         {
-            var above = [];
-            var below = [];
-            for (j = 0; j < N; j++)
+            if (isHub[i] && nodes[i].col == hCol)
             {
-                if (hubAttachment[j] == i)
+                var above = [];
+                var below = [];
+                for (j = 0; j < N; j++)
                 {
-                    if (nodes[j].stereotype == "Server Page") above.push(nodes[j]);
-                    else below.push(nodes[j]);
+                    if (hubAttachment[j] == i)
+                    {
+                        if (nodes[j].stereotype == "Server Page") above.push(nodes[j]);
+                        else below.push(nodes[j]);
+                    }
                 }
+                var sy = 0;
+                var cy = 0;
+                for (j = 0; j < adjAll[i].length; j++)
+                {
+                    var oNode = (adjAll[i][j].src.id == i) ? adjAll[i][j].dst : adjAll[i][j].src;
+                    var sameWing = (!useDualWing && oNode.col >= 2) ||
+                                   (useDualWing && hCol == 1 && oNode.col >= 2 && oNode.col <= 4) ||
+                                   (useDualWing && hCol == 5 && oNode.col >= 6 && oNode.col <= 8);
+                    if (sameWing)
+                    {
+                        sy += oNode.y + oNode.h / 2;
+                        cy++;
+                    }
+                }
+                var hubCenterY = (cy > 0) ? (sy / cy) : 500;
+                hubGroups.push({
+                    hub: nodes[i],
+                    above: above,
+                    below: below,
+                    targetCenterY: hubCenterY,
+                    isEntry: inFromActor[i]
+                });
             }
-            var sy = 0;
-            var cy = 0;
-            for (j = 0; j < adjAll[i].length; j++)
+        }
+        hubGroups.sort(function(a, b) {
+            if (a.isEntry != b.isEntry) return a.isEntry ? -1 : 1;
+            return a.targetCenterY - b.targetCenterY;
+        });
+
+        var prevBotH = LAYOUT_CFG.marginY;
+        for (i = 0; i < hubGroups.length; i++)
+        {
+            var hg = hubGroups[i];
+            var aboveH = 0;
+            for (j = 0; j < hg.above.length; j++) aboveH += hg.above[j].h + 32;
+            var idealHubTop = Math.round(hg.targetCenterY - hg.hub.h / 2);
+            var groupStart = Math.max(prevBotH, idealHubTop - aboveH);
+            var yCursor = groupStart;
+
+            for (j = 0; j < hg.above.length; j++)
             {
-                var oNode = (adjAll[i][j].src.id == i) ? adjAll[i][j].dst : adjAll[i][j].src;
-                if (oNode.col >= 2)
-                {
-                    sy += oNode.y + oNode.h / 2;
-                    cy++;
-                }
+                hg.above[j].y = yCursor;
+                yCursor += hg.above[j].h + 32;
             }
-            var hubCenterY = (cy > 0) ? (sy / cy) : (inFromActor[i] ? 300 : 1100);
-            hubGroups.push({
-                hub: nodes[i],
-                above: above,
-                below: below,
-                targetCenterY: hubCenterY,
-                isEntry: inFromActor[i]
-            });
+            hg.hub.y = yCursor;
+            yCursor += hg.hub.h + 32;
+            for (j = 0; j < hg.below.length; j++)
+            {
+                hg.below[j].y = yCursor;
+                yCursor += hg.below[j].h + 32;
+            }
+            prevBotH = yCursor + LAYOUT_CFG.bandGap;
         }
-    }
-    hubGroups.sort(function(a, b) {
-        if (a.isEntry != b.isEntry) return a.isEntry ? -1 : 1;
-        return a.targetCenterY - b.targetCenterY;
-    });
-
-    var prevBot1 = LAYOUT_CFG.marginY;
-    for (i = 0; i < hubGroups.length; i++)
-    {
-        var hg = hubGroups[i];
-        var aboveH = 0;
-        for (j = 0; j < hg.above.length; j++) aboveH += hg.above[j].h + 32;
-        var idealHubTop = Math.round(hg.targetCenterY - hg.hub.h / 2);
-        var groupStart = Math.max(prevBot1, idealHubTop - aboveH);
-        var yCursor = groupStart;
-
-        for (j = 0; j < hg.above.length; j++)
-        {
-            hg.above[j].y = yCursor;
-            yCursor += hg.above[j].h + 32;
-        }
-        hg.hub.y = yCursor;
-        yCursor += hg.hub.h + 32;
-        for (j = 0; j < hg.below.length; j++)
-        {
-            hg.below[j].y = yCursor;
-            yCursor += hg.below[j].h + 32;
-        }
-        prevBot1 = yCursor + LAYOUT_CFG.bandGap;
     }
 
     // 10. Posicionar Col 0 (Actores centrados frente a su Hub de inicio)
@@ -1653,7 +2744,8 @@ function calcularPosicionesGrafo(grafo)
     return {
         colX: colX,
         colMaxW: colMaxW,
-        bandBounds: bandBounds
+        bandBounds: bandBounds,
+        numCols: numCols
     };
 }
 
@@ -1802,7 +2894,7 @@ function rutearConectoresOrtogonales(grafo, meta)
             }
             if (blockedVert)
             {
-                var sideGut = (s.col <= 2) ? 4 : 2;
+                var sideGut = (s.col == 1 || s.col == 2 || s.col == 5 || s.col == 6) ? 4 : 2;
                 e.srcSide = sideGut;
                 e.dstSide = sideGut;
             }
@@ -1953,8 +3045,10 @@ function rutearConectoresOrtogonales(grafo, meta)
 
     for (var rx = maxRight + pad + 4; rx <= maxRight + 70; rx += ts) addX(rx);
 
-    for (var c = 0; c < 5; c++)
+    var nCols = (meta.numCols != null) ? meta.numCols : 6;
+    for (var c = 0; c < nCols - 1; c++)
     {
+        if (meta.colMaxW[c] == 0) continue;
         var gLeft = meta.colX[c] + meta.colMaxW[c] + pad + 3;
         var gRight = meta.colX[c + 1] - pad - 3;
         for (var gx = gLeft; gx <= gRight; gx += ts)
@@ -1973,7 +3067,7 @@ function rutearConectoresOrtogonales(grafo, meta)
     for (var by2 = maxBottom + pad + 4; by2 <= maxBottom + 70; by2 += ts) addY(by2);
 
     // Llenar con carriles horizontales todos los huecos verticales entre cajas apiladas de cada columna
-    for (var colIdx = 0; colIdx <= 5; colIdx++)
+    for (var colIdx = 0; colIdx < nCols; colIdx++)
     {
         var colBoxes = [];
         for (i = 0; i < nodes.length; i++)
