@@ -41,7 +41,7 @@ export const etiquetaEstado = (s) => ETIQUETA_ESTADO[s] ?? capitalizar(s);
 export const COLOR_ESTADO = {
     activo: 'exito', activa: 'peligro', inactivo: 'suave', atendida: 'exito',
     pendiente: 'aviso', confirmado: 'info', listo_entrega: 'acento', entregado: 'exito', cancelado: 'peligro',
-    pagado: 'exito', rechazado: 'peligro', anulado: 'suave',
+    pagado: 'exito', rechazado: 'peligro', anulado: 'suave', devuelto: 'info',
     en_camino: 'info', entregada: 'exito', fallida: 'peligro',
     reportada: 'aviso', validada: 'exito', rechazada: 'peligro',
     disponible: 'exito', agotado: 'suave', vencido: 'peligro',

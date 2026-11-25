@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { CreditCard, Landmark, LoaderCircle, Plus, Star, Trash2 } from 'lucide-react';
-import api from '../../api/cliente';
+import api, { STRIPE_KEY } from '../../api/cliente';
 import { Alerta, Campo, Cargando, Confirmar, Encabezado, Estado, Insignia, Modal, Vacio } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
 import useFormulario from '../../hooks/useFormulario';
 import useListado, { useAviso } from '../../hooks/useListado';
 import { luhnValido, texto, z } from '../../validacion/esquemas';
+
+const FormTarjetaStripe = lazy(() => import('../../componentes/PagoStripe'));
 
 const anioActual = new Date().getFullYear();
 const mesActual = new Date().getMonth() + 1;
@@ -104,7 +106,7 @@ export default function MetodosPago() {
 
     return (
         <>
-            <Encabezado titulo={esStaff ? 'Métodos de pago de usuarios' : 'Mis métodos de pago'} descripcion="Tarjetas y cuentas registradas (simuladas: solo se guardan los últimos 4 dígitos)">
+            <Encabezado titulo={esStaff ? 'Métodos de pago de usuarios' : 'Mis métodos de pago'} descripcion={STRIPE_KEY ? 'Tarjetas procesadas por Stripe (modo prueba) y cuentas bancarias: FEDER solo guarda marca y últimos 4 dígitos' : 'Tarjetas y cuentas registradas (simuladas: solo se guardan los últimos 4 dígitos)'}>
                 {puede('metodos_pago', 'crear') && (
                     <>
                         <button type="button" className="btn-primario" onClick={() => abrir('Tarjeta')}><CreditCard className="size-4" /> Agregar tarjeta</button>
@@ -129,6 +131,7 @@ export default function MetodosPago() {
                                 <span>{m.titular}</span>
                                 <span>{m.tipo === 'Tarjeta' ? `${m.marca} · ${String(m.mes_venc).padStart(2, '0')}/${m.anio_venc}` : m.banco}</span>
                             </div>
+                            {m.tipo === 'Tarjeta' && <p className="mt-1 text-xs text-suave">{m.proveedor === 'stripe' ? 'Procesada por Stripe' : 'Tarjeta simulada'}</p>}
                             {esStaff && <p className="mt-1 text-xs text-suave">Usuario: {m.usuario}</p>}
                             {!esStaff && m.estado === 'activo' && (
                                 <div className="mt-4 flex gap-2">
@@ -140,7 +143,9 @@ export default function MetodosPago() {
                     ))}
                 </div>
             )}
-            {nuevo && <FormMetodo tipo={nuevo.tipo} metodoId={nuevo.id} onCerrar={() => setNuevo(null)} onGuardado={(msg) => { setNuevo(null); aviso.ok(msg); listado.recargar(); }} />}
+            {nuevo && (nuevo.tipo === 'Tarjeta' && STRIPE_KEY
+                ? <Suspense fallback={<Cargando texto="Conectando con Stripe…" />}><FormTarjetaStripe metodoId={nuevo.id} onCerrar={() => setNuevo(null)} onGuardado={(msg) => { setNuevo(null); aviso.ok(msg); listado.recargar(); }} /></Suspense>
+                : <FormMetodo tipo={nuevo.tipo} metodoId={nuevo.id} onCerrar={() => setNuevo(null)} onGuardado={(msg) => { setNuevo(null); aviso.ok(msg); listado.recargar(); }} />)}
             <Confirmar abierto={!!borrar} titulo="Eliminar método de pago" mensaje={`¿Eliminar “${borrar?.alias}” (•••• ${borrar?.ultimos4})?`} onConfirmar={eliminar} onCerrar={() => setBorrar(null)} textoConfirmar="Eliminar" />
         </>
     );

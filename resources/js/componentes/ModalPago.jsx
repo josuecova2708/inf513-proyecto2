@@ -39,6 +39,18 @@ export default function ModalPago({ titulo, montoMaximo, montoFijo = false, nume
         }
     }, [esStaff]);
 
+    /** Stripe: el banco pide 3D Secure. Se abre su ventana y luego FEDER consulta a Stripe el resultado real. */
+    const autenticar = async (r) => {
+        const { completarAutenticacion } = await import('./PagoStripe');
+        const fallo = await completarAutenticacion(r.client_secret);
+        try {
+            const { data } = await api.post(`/pagos/${r.pago_id}/confirmar`);
+            return { ...r, ...data };
+        } catch (e) {
+            return { ...r, estado: 'rechazado', message: fallo || mensajeError(e) };
+        }
+    };
+
     const pagar = async () => {
         setError('');
         const m = Number(monto);
@@ -54,7 +66,7 @@ export default function ModalPago({ titulo, montoMaximo, montoFijo = false, nume
                 metodo_pago_usuario_id: metodo.nombre === 'Tarjeta' ? Number(tarjeta) : undefined,
                 referencia: referencia.trim() || undefined,
             });
-            setResultado(r);
+            setResultado(r.requiere_accion ? await autenticar(r) : r);
         } catch (e) {
             setError(mensajeError(e));
         } finally {
@@ -65,7 +77,7 @@ export default function ModalPago({ titulo, montoMaximo, montoFijo = false, nume
     if (resultado) {
         return (
             <Modal abierto titulo="Resultado del pago" onCerrar={() => onCerrar(true)} pie={<button type="button" className="btn-primario" onClick={() => onCerrar(true)}>Aceptar</button>}>
-                <Alerta tipo={resultado.estado === 'pagado' ? 'exito' : 'aviso'}>{resultado.message}</Alerta>
+                <Alerta tipo={resultado.estado === 'pagado' ? 'exito' : resultado.estado === 'rechazado' ? 'error' : 'aviso'}>{resultado.message}</Alerta>
                 {resultado.estado === 'pendiente' && metodo?.nombre === 'QR' && (
                     <div className="mt-4 text-center">
                         <img src={`${api.defaults.baseURL}/qr/activo/imagen`} alt="Código QR de cobro de FEDER" className="mx-auto w-56" />
@@ -112,7 +124,7 @@ export default function ModalPago({ titulo, montoMaximo, montoFijo = false, nume
                         <div>
                             <label htmlFor="pago-tarjeta" className="etiqueta">Tarjeta</label>
                             <select id="pago-tarjeta" className="campo" value={tarjeta} onChange={(e) => setTarjeta(e.target.value)}>
-                                {tarjetas.map((t) => <option key={t.id} value={t.id}>{t.alias} · {t.marca} •••• {t.ultimos4} (vence {String(t.mes_venc).padStart(2, '0')}/{t.anio_venc})</option>)}
+                                {tarjetas.map((t) => <option key={t.id} value={t.id}>{t.alias} · {t.marca} •••• {t.ultimos4} (vence {String(t.mes_venc).padStart(2, '0')}/{t.anio_venc}){t.proveedor === 'stripe' ? ' · Stripe' : ''}</option>)}
                             </select>
                         </div>
                     ) : <Alerta tipo="aviso">No tienes tarjetas registradas. <Link to="/panel/metodos-pago" className="font-semibold underline">Registra una aquí</Link>.</Alerta>

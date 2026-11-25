@@ -92,14 +92,30 @@ La contraseña de todos es `feder123`. En la pantalla de login también hay boto
 | Productor | `productor.pedro@example.com` · `productor.rosa@example.com` |
 | Cliente | `cliente.ana@example.com` · `cliente.carlos@example.com` |
 
-**Tarjetas de prueba** (pasarela simulada):
+### Pagos con tarjeta: Stripe o simulada
 
-| Número | Resultado |
-|---|---|
-| `4111 1111 1111 1111` | aprobada |
-| `4000 0000 0000 0002` | rechazada por fondos insuficientes |
+Se elige en el `.env`:
 
-Usa cualquier CVV y una fecha de vencimiento futura.
+```env
+PAGOS_PASARELA=stripe        # o "simulada" (sin internet)
+STRIPE_KEY=pk_test_...       # dashboard.stripe.com → Developers → API keys (modo prueba)
+STRIPE_SECRET=sk_test_...
+```
+
+Después de cambiarlo, ejecuta `php artisan config:clear`.
+
+- **Con Stripe** el número de tarjeta se escribe en el formulario de Stripe y FEDER solo guarda el identificador de la tarjeta, la marca y los últimos 4 dígitos. Los cobros aparecen en el panel de Stripe (modo prueba).
+- QR, transferencia y efectivo funcionan igual con ambas pasarelas.
+- Si el servidor no puede conectarse a `api.stripe.com`, usa `PAGOS_PASARELA=simulada`.
+
+**Tarjetas de prueba.** Usa cualquier CVC y una fecha de vencimiento futura.
+
+| Stripe | Simulada | Resultado |
+|---|---|---|
+| `4242 4242 4242 4242` | `4111 1111 1111 1111` | aprobada |
+| `4000 0000 0000 0341` | `4000 0000 0000 0002` | se registra, pero el cobro se rechaza |
+| `4000 0000 0000 9995` | — | fondos insuficientes: Stripe la rechaza al registrarla |
+| `4000 0025 0000 3155` | — | pide 3D Secure (aparece una ventana para aprobar o rechazar) |
 
 ### Comandos útiles
 

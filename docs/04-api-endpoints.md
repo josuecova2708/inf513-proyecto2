@@ -64,6 +64,7 @@ Columna **Permiso**: `modulo,acción` que exige el middleware `permiso` contra l
 | GET | `/api/metodos-pago` | PagoController@metodos | Sesión |
 | GET | `/api/mis-metodos-pago` | MetodoPagoUsuarioController@index | `metodos_pago,ver` |
 | POST | `/api/mis-metodos-pago` | MetodoPagoUsuarioController@store | `metodos_pago,crear` |
+| POST | `/api/mis-metodos-pago/setup-intent` | MetodoPagoUsuarioController@setupIntent | `metodos_pago,crear` |
 | PUT | `/api/mis-metodos-pago/{id}` | MetodoPagoUsuarioController@update | `metodos_pago,editar` |
 | DELETE | `/api/mis-metodos-pago/{id}` | MetodoPagoUsuarioController@destroy | `metodos_pago,eliminar` |
 | GET | `/api/notificaciones` | NotificacionController@index | `notificaciones,ver` |
@@ -71,6 +72,7 @@ Columna **Permiso**: `modulo,acción` que exige el middleware `permiso` contra l
 | GET | `/api/notificaciones/no-leidas` | NotificacionController@noLeidas | `notificaciones,ver` |
 | PUT | `/api/notificaciones/{id}/leer` | NotificacionController@leer | `notificaciones,ver` |
 | GET | `/api/pagos` | PagoController@index | `pagos,ver` |
+| POST | `/api/pagos/{id}/confirmar` | PagoController@confirmar | `pagos,crear` |
 | PUT | `/api/pagos/{id}/verificar` | PagoController@verificar | `pagos,editar` |
 | GET | `/api/panel/resumen` | DashboardController@resumenUsuario | Sesión |
 | GET | `/api/pedidos` | PedidoController@index | `pedidos,ver` |

@@ -3,7 +3,11 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Services\Pagos\PasarelaPago;
+use App\Services\Pagos\ResultadoPago;
+use App\Services\StripeServicio;
 use Illuminate\Http\UploadedFile;
+use Stripe\PaymentIntent;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -121,6 +125,47 @@ class FederTest extends TestCase
             ->assertCreated()->assertJson(['estado' => 'pagado']);
         $this->assertSame('confirmado', DB::table('pedido')->where('id', $pedido)->value('estado'));
         $this->assertDatabaseHas('notificacion', ['pedido_id' => $pedido, 'tipo' => 'pedido_confirmado', 'canal' => 'sistema']);
+    }
+
+    public function test_pago_con_3d_secure_se_confirma_consultando_a_stripe(): void
+    {
+        // Pasarela falsa: el banco pide 3D Secure (como haría Stripe con 4000 0025 0000 3155)
+        $this->app->bind(PasarelaPago::class, fn () => new class implements PasarelaPago
+        {
+            public function cobrar(array $datos): ResultadoPago
+            {
+                return new ResultadoPago('pendiente', 'pi_prueba_3ds', 'Su banco pide confirmar el pago (3D Secure).', 'pi_prueba_3ds_secret_x', 'stripe');
+            }
+
+            public function nombre(): string
+            {
+                return 'Falsa';
+            }
+        });
+        $this->mock(StripeServicio::class, fn ($m) => $m->shouldReceive('consultar')->with('pi_prueba_3ds')
+            ->andReturn(PaymentIntent::constructFrom(['id' => 'pi_prueba_3ds', 'status' => 'succeeded'])));
+
+        $this->como('cliente.carlos@example.com');
+        $tarjetaMetodo = DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id');
+        $tarjeta = $this->postJson('/api/mis-metodos-pago', [
+            'metodo_pago_id' => $tarjetaMetodo, 'alias' => 'Visa', 'titular' => 'Carlos Vaca', 'numero_tarjeta' => '4111111111111111',
+            'mes_venc' => 12, 'anio_venc' => now()->year + 2, 'cvv' => '123',
+        ])->assertCreated()->json('metodo.id');
+        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id');
+        $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 1])->assertOk();
+        $pedido = $this->postJson('/api/carrito/confirmar', ['tipo_entrega' => 'recojo'])->json('pedido_id');
+
+        $r = $this->postJson("/api/pedidos/{$pedido}/pagar", ['metodo_pago_id' => $tarjetaMetodo, 'metodo_pago_usuario_id' => $tarjeta])
+            ->assertCreated()->assertJson(['estado' => 'pendiente', 'requiere_accion' => true, 'client_secret' => 'pi_prueba_3ds_secret_x']);
+        $this->assertSame('pendiente', DB::table('pedido')->where('id', $pedido)->value('estado'));
+        $this->assertDatabaseHas('pago', ['id' => $r->json('pago_id'), 'pasarela' => 'stripe', 'codigo_transaccion' => 'pi_prueba_3ds']);
+
+        // Tras el 3D Secure, el servidor consulta a Stripe (no confía en el navegador)
+        $this->postJson("/api/pagos/{$r->json('pago_id')}/confirmar")->assertOk()->assertJson(['estado' => 'pagado']);
+        $this->assertSame('confirmado', DB::table('pedido')->where('id', $pedido)->value('estado'));
+
+        // Otro cliente no puede confirmar pagos ajenos
+        $this->como('cliente.ana@example.com')->postJson("/api/pagos/{$r->json('pago_id')}/confirmar")->assertForbidden();
     }
 
     public function test_plan_de_pagos_en_cuotas(): void

@@ -8,7 +8,7 @@ class MetodoPagoUsuario extends Modelo
 {
     protected $table = 'metodo_pago_usuario';
 
-    protected $hidden = ['token_simulado'];
+    protected $hidden = ['token_pasarela'];
 
     protected $casts = ['predeterminado' => 'boolean', 'fecha_registro' => 'datetime'];
 

@@ -127,6 +127,7 @@ class PlanPagoController extends Controller
             if ($anterior) {
                 throw new ErrorNegocio("Primero debe pagar la cuota {$anterior}.");
             }
+            $servicio->sincronizarPendientesStripe($p->id);
             if (DB::table('pago')->where('cuota_pago_id', $id)->where('estado', 'pendiente')->exists()) {
                 throw new ErrorNegocio('Esta cuota ya tiene un pago pendiente de verificación.');
             }
@@ -135,7 +136,6 @@ class PlanPagoController extends Controller
                 $d['referencia'] ?? "Cuota {$cuota->numero}/{$plan->nro_cuotas}", $id);
         });
 
-        return response()->json(['message' => $r->mensaje, 'pago_id' => $pagoId, 'estado' => $r->estado, 'codigo_transaccion' => $r->codigoTransaccion],
-            $r->estado === 'rechazado' ? 422 : 201);
+        return PagoController::respuestaPago($pagoId, $r);
     }
 }

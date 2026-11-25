@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\ErrorNegocio;
 use App\Http\Controllers\Controller;
 use App\Models\MetodoPagoUsuario;
+use App\Services\StripeServicio;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,16 +26,25 @@ class MetodoPagoUsuarioController extends Controller
             ->when($request->boolean('activos'), fn ($w) => $w->where('m.estado', 'activo'))
             ->orderByDesc('m.predeterminado')->orderByDesc('m.id')
             ->get(['m.id', 'm.usuario_id', 'm.metodo_pago_id', 'mp.nombre as tipo', 'm.alias', 'm.titular', 'm.marca', 'm.ultimos4',
-                'm.mes_venc', 'm.anio_venc', 'm.banco', 'm.predeterminado', 'm.estado', 'm.fecha_registro',
+                'm.mes_venc', 'm.anio_venc', 'm.banco', 'm.predeterminado', 'm.estado', 'm.fecha_registro', 'm.proveedor',
                 DB::raw("u.nombre || ' ' || u.apellido AS usuario")]);
 
         return response()->json($q);
+    }
+
+    /** Stripe: SetupIntent para que el navegador registre la tarjeta directamente en Stripe. */
+    public function setupIntent(Request $request, StripeServicio $stripe): JsonResponse
+    {
+        return response()->json(['client_secret' => $stripe->setupIntent($request->user())]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $tarjetaId = DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id');
         $transfId = DB::table('metodo_pago')->where('nombre', 'Transferencia')->value('id');
+        if (StripeServicio::activo() && (int) $request->input('metodo_pago_id') === (int) $tarjetaId) {
+            return $this->guardarTarjetaStripe($request, (int) $tarjetaId);
+        }
         $d = $request->validate([
             'metodo_pago_id' => ['required', 'integer', 'in:'.$tarjetaId.','.$transfId],
             'alias' => ['required', 'string', 'min:2', 'max:50'],
@@ -63,7 +73,7 @@ class MetodoPagoUsuarioController extends Controller
         $u = $request->user();
         $datos = [
             'usuario_id' => $u->id, 'metodo_pago_id' => $d['metodo_pago_id'], 'alias' => $d['alias'],
-            'titular' => mb_strtoupper($d['titular']), 'token_simulado' => 'tok_'.Str::random(32), 'estado' => 'activo',
+            'titular' => mb_strtoupper($d['titular']), 'token_pasarela' => 'tok_'.Str::random(32), 'estado' => 'activo',
         ];
 
         if ((int) $d['metodo_pago_id'] === (int) $tarjetaId) {
@@ -79,11 +89,44 @@ class MetodoPagoUsuarioController extends Controller
             $datos += ['banco' => $d['banco'], 'marca' => 'Cuenta', 'ultimos4' => substr($d['numero_cuenta'], -4)];
         }
 
-        $m = DB::transaction(function () use ($datos, $d, $u) {
-            $primero = ! DB::table('metodo_pago_usuario')->where('usuario_id', $u->id)->where('estado', 'activo')->exists();
-            $pred = $primero || ! empty($d['predeterminado']);
+        return $this->crear($datos, ! empty($d['predeterminado']), $u->id);
+    }
+
+    /**
+     * Tarjeta registrada con Stripe Elements: el navegador solo envía el id pm_…; marca, últimos 4 dígitos
+     * y vencimiento se leen de Stripe. El número y el CVC nunca llegan a este servidor.
+     */
+    private function guardarTarjetaStripe(Request $request, int $tarjetaId): JsonResponse
+    {
+        $d = $request->validate([
+            'alias' => ['required', 'string', 'min:2', 'max:50'],
+            'titular' => ['required', 'string', 'min:3', 'max:120', 'regex:/^[\pL\s\'.-]+$/u'],
+            'payment_method_id' => ['required', 'string', 'regex:/^pm_\w{6,60}$/'],
+            'predeterminado' => ['nullable', 'boolean'],
+        ], [
+            'titular.regex' => 'El titular solo puede contener letras y espacios.',
+            'payment_method_id.required' => 'Complete los datos de la tarjeta.',
+            'payment_method_id.regex' => 'La tarjeta no es válida.',
+        ]);
+        $u = $request->user();
+        if (DB::table('metodo_pago_usuario')->where('token_pasarela', $d['payment_method_id'])->exists()) {
+            throw new ErrorNegocio('Esa tarjeta ya está registrada.');
+        }
+        $tarjeta = app(StripeServicio::class)->datosTarjeta($u, $d['payment_method_id']);
+
+        return $this->crear([
+            'usuario_id' => $u->id, 'metodo_pago_id' => $tarjetaId, 'alias' => $d['alias'], 'titular' => mb_strtoupper($d['titular']),
+            'token_pasarela' => $d['payment_method_id'], 'proveedor' => 'stripe', 'estado' => 'activo',
+        ] + $tarjeta, ! empty($d['predeterminado']), $u->id);
+    }
+
+    private function crear(array $datos, bool $predeterminado, int $usuarioId): JsonResponse
+    {
+        $m = DB::transaction(function () use ($datos, $predeterminado, $usuarioId) {
+            $primero = ! DB::table('metodo_pago_usuario')->where('usuario_id', $usuarioId)->where('estado', 'activo')->exists();
+            $pred = $primero || $predeterminado;
             if ($pred) {
-                DB::table('metodo_pago_usuario')->where('usuario_id', $u->id)->update(['predeterminado' => false]);
+                DB::table('metodo_pago_usuario')->where('usuario_id', $usuarioId)->update(['predeterminado' => false]);
             }
 
             return MetodoPagoUsuario::create($datos + ['predeterminado' => $pred]);
@@ -112,6 +155,9 @@ class MetodoPagoUsuarioController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $m = MetodoPagoUsuario::where('usuario_id', $request->user()->id)->findOrFail($id);
+        if ($m->proveedor === 'stripe' && StripeServicio::activo()) {
+            app(StripeServicio::class)->separarTarjeta($m->token_pasarela); // Stripe deja de poder cobrarla
+        }
         if (DB::table('pago')->where('metodo_pago_usuario_id', $id)->exists()) {
             $m->update(['estado' => 'inactivo', 'predeterminado' => false]);
 

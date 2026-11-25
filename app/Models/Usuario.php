@@ -26,7 +26,7 @@ class Usuario extends Authenticatable
 
     protected $guarded = ['id', 'password_hash'];
 
-    protected $hidden = ['password_hash'];
+    protected $hidden = ['password_hash', 'stripe_customer_id'];
 
     protected $casts = ['fecha_registro' => 'datetime'];
 

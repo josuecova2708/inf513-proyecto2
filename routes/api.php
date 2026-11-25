@@ -134,8 +134,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('metodos-pago', [PagoController::class, 'metodos']);
     Route::get('pagos', [PagoController::class, 'index'])->middleware('permiso:pagos,ver');
     Route::post('pedidos/{id}/pagar', [PagoController::class, 'pagar'])->middleware('permiso:pagos,crear');
+    Route::post('pagos/{id}/confirmar', [PagoController::class, 'confirmar'])->middleware('permiso:pagos,crear'); // tras 3D Secure (Stripe)
     Route::put('pagos/{id}/verificar', [PagoController::class, 'verificar'])->middleware('permiso:pagos,editar');
     Route::get('mis-metodos-pago', [MetodoPagoUsuarioController::class, 'index'])->middleware('permiso:metodos_pago,ver');
+    Route::post('mis-metodos-pago/setup-intent', [MetodoPagoUsuarioController::class, 'setupIntent'])->middleware('permiso:metodos_pago,crear');
     Route::post('mis-metodos-pago', [MetodoPagoUsuarioController::class, 'store'])->middleware('permiso:metodos_pago,crear');
     Route::put('mis-metodos-pago/{id}', [MetodoPagoUsuarioController::class, 'update'])->middleware('permiso:metodos_pago,editar');
     Route::delete('mis-metodos-pago/{id}', [MetodoPagoUsuarioController::class, 'destroy'])->middleware('permiso:metodos_pago,eliminar');

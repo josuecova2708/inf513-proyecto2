@@ -241,6 +241,7 @@ class PedidoServicio
         }
         DB::select('SELECT fn_liberar_reservas(?)', [$p->id]);
         DB::table('pedido')->where('id', $p->id)->update(['estado' => 'cancelado']);
+        $devuelto = self::reembolsarStripe($p->id);
         DB::table('pago')->where('pedido_id', $p->id)->where('estado', 'pendiente')->update(['estado' => 'anulado']);
         DB::table('plan_pago')->where('pedido_id', $p->id)->update(['estado' => 'cancelado']);
         DB::table('entrega')->where('pedido_id', $p->id)->where('estado', '!=', 'entregada')->update(['estado' => 'fallida']);
@@ -248,7 +249,30 @@ class PedidoServicio
         $cobrado = (float) DB::table('v_saldo_pedido')->where('pedido_id', $p->id)->value('cobrado');
 
         return "Pedido {$p->numero} cancelado. El stock reservado volvió a estar disponible."
+            .($devuelto > 0 ? ' Se reembolsaron Bs. '.number_format($devuelto, 2).' a la tarjeta del cliente (Stripe).' : '')
             .($cobrado > 0 ? ' Atención: tenía pagos confirmados por Bs. '.number_format($cobrado, 2).' que deben devolverse.' : '');
+    }
+
+    /** Al cancelar: los cobros con Stripe se reembolsan y los 3D Secure a medias se cancelan. Devuelve el monto devuelto. */
+    private static function reembolsarStripe(int $pedidoId): float
+    {
+        $pagos = DB::table('pago')->where('pedido_id', $pedidoId)->where('pasarela', 'stripe')->whereIn('estado', ['pagado', 'pendiente'])->get();
+        if ($pagos->isEmpty() || ! StripeServicio::activo()) {
+            return 0;
+        }
+        // Primero se registra en la BD y AL FINAL se llama a Stripe: si Stripe falla, la transacción
+        // se deshace; si la BD fallara, Stripe nunca habría devuelto el dinero (no quedan descuadres).
+        $pagados = $pagos->where('estado', 'pagado');
+        DB::table('pago')->whereIn('id', $pagados->pluck('id'))->update(['estado' => 'devuelto']);
+        $stripe = app(StripeServicio::class);
+        foreach ($pagos->where('estado', 'pendiente') as $pago) {
+            $stripe->cancelar($pago->codigo_transaccion);
+        }
+        foreach ($pagados as $pago) {
+            $stripe->reembolsar($pago->codigo_transaccion);
+        }
+
+        return (float) $pagados->sum('monto');
     }
 
     /** Avisa al cliente cuándo (fecha y hora aproximada) se entrega o puede recoger su pedido. */

@@ -15,6 +15,8 @@
             imgUrl: @json(asset('img')),
             ubicacion: @json(config('feder.origen')),
             tarifaEnvio: @json(\App\Services\EnvioServicio::tarifa()),
+            // Pagos con tarjeta: solo la clave PUBLICABLE de Stripe llega al navegador
+            stripeKey: @json(\App\Services\StripeServicio::activo() ? config('pagos.stripe.key') : null),
         };
         // Aplica el tema guardado antes de pintar, para evitar parpadeo
         (function () {

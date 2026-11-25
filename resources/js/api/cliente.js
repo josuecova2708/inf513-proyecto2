@@ -10,6 +10,8 @@ export const IMG_URL = config.imgUrl ?? `${BASE_PATH}/img`;
 export const UBICACION_FEDER = config.ubicacion ?? { lat: -17.77981, lng: -63.163828, direccion: 'Oficinas de FEDER' };
 /** Parámetros de la tarifa de envío (vista previa; el cobro lo calcula el servidor) */
 export const TARIFA_ENVIO = config.tarifaEnvio ?? null;
+/** Clave publicable de Stripe (null si el servidor usa la pasarela simulada) */
+export const STRIPE_KEY = config.stripeKey ?? null;
 const CLAVE_TOKEN = 'feder_token';
 
 export const tokenGuardado = () => localStorage.getItem(CLAVE_TOKEN);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\ErrorNegocio;
 use App\Http\Controllers\Controller;
 use App\Services\PagoServicio;
+use App\Services\Pagos\ResultadoPago;
 use App\Services\PedidoServicio;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class PagoController extends Controller
     public function index(Request $request): JsonResponse
     {
         $f = $request->validate([
-            'estado' => ['nullable', Rule::in(['pendiente', 'pagado', 'rechazado', 'anulado'])],
+            'estado' => ['nullable', Rule::in(['pendiente', 'pagado', 'rechazado', 'anulado', 'devuelto'])],
             'metodo_pago_id' => ['nullable', 'integer'],
             'q' => ['nullable', 'string', 'max:80'],
         ]);
@@ -64,6 +65,7 @@ class PagoController extends Controller
             if (DB::table('plan_pago')->where('pedido_id', $id)->where('estado', 'vigente')->exists()) {
                 throw new ErrorNegocio('Este pedido tiene un plan de pagos: pague desde sus cuotas.');
             }
+            $servicio->sincronizarPendientesStripe($id);
             $saldo = (float) DB::table('v_saldo_pedido')->where('pedido_id', $id)->value('saldo_pendiente');
             $pendiente = (float) DB::table('pago')->where('pedido_id', $id)->where('estado', 'pendiente')->sum('monto');
             if ($saldo - $pendiente <= 0.004) {
@@ -77,9 +79,24 @@ class PagoController extends Controller
             return $servicio->procesar($p, $u, (int) $d['metodo_pago_id'], $monto, $d['metodo_pago_usuario_id'] ?? null, $d['referencia'] ?? null);
         });
 
-        $codigo = $r->estado === 'rechazado' ? 422 : 201;
+        return self::respuestaPago($pagoId, $r);
+    }
 
-        return response()->json(['message' => $r->mensaje, 'pago_id' => $pagoId, 'estado' => $r->estado, 'codigo_transaccion' => $r->codigoTransaccion], $codigo);
+    /** Respuesta común de pago (pedido o cuota). Con 3D Secure incluye el client_secret para el navegador. */
+    public static function respuestaPago(int $pagoId, ResultadoPago $r): JsonResponse
+    {
+        return response()->json(array_filter([
+            'message' => $r->mensaje, 'pago_id' => $pagoId, 'estado' => $r->estado, 'codigo_transaccion' => $r->codigoTransaccion,
+            'requiere_accion' => $r->requiereAccion() ?: null, 'client_secret' => $r->clientSecret,
+        ], fn ($v) => $v !== null), $r->estado === 'rechazado' ? 422 : 201);
+    }
+
+    /** Después del 3D Secure: el servidor consulta a Stripe y registra el resultado real. */
+    public function confirmar(Request $request, int $id, PagoServicio $servicio): JsonResponse
+    {
+        [$estado, $mensaje] = DB::transaction(fn () => $servicio->confirmarStripe($id, $request->user()));
+
+        return response()->json(['message' => $mensaje, 'estado' => $estado], $estado === 'rechazado' ? 422 : 200);
     }
 
     /** El personal confirma (o rechaza/anula) un pago pendiente: QR, transferencia o efectivo contra entrega. */

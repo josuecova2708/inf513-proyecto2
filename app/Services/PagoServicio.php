@@ -46,11 +46,70 @@ class PagoServicio
             'pedido_id' => $pedido->id, 'metodo_pago_id' => $metodo->id, 'monto' => $monto, 'fecha' => now(),
             'estado' => $r->estado, 'referencia' => $referencia, 'codigo_transaccion' => $r->codigoTransaccion,
             'metodo_pago_usuario_id' => $tarjeta?->id, 'cuota_pago_id' => $cuotaId, 'registrado_por' => $usuario->id,
+            'pasarela' => $r->pasarela,
         ]);
 
-        $this->despuesDePago($pagoId, $r->estado, $usuario->esStaff() ? $usuario->id : null); // el cliente que paga no "gestiona" el pedido
+        // Con 3D Secure pendiente todavía no hay resultado: se resuelve en confirmarStripe()
+        if (! $r->requiereAccion()) {
+            $this->despuesDePago($pagoId, $r->estado, $usuario->esStaff() ? $usuario->id : null); // el cliente que paga no "gestiona" el pedido
+        }
 
         return [$pagoId, $r];
+    }
+
+    /**
+     * Tras el 3D Secure el navegador avisa y aquí se CONSULTA a Stripe el estado real del cobro
+     * (no se confía en lo que diga el navegador). Devuelve [estado, mensaje].
+     *
+     * @return array{0: string, 1: string}
+     */
+    public function confirmarStripe(int $pagoId, Usuario $usuario): array
+    {
+        $pago = DB::table('pago as pa')->join('pedido as pe', 'pe.id', '=', 'pa.pedido_id')
+            ->where('pa.id', $pagoId)->lockForUpdate()->first(['pa.*', 'pe.cliente_id'])
+            ?? throw new ErrorNegocio('El pago no existe.', 404);
+        if (! $usuario->esStaff() && $pago->cliente_id !== $usuario->id) {
+            throw new ErrorNegocio('El pago no le pertenece.', 403);
+        }
+        if ($pago->pasarela !== 'stripe' || $pago->estado !== 'pendiente') {
+            return [$pago->estado, "El pago ya está {$pago->estado}."];
+        }
+
+        $stripe = app(StripeServicio::class);
+        $pi = $stripe->consultar($pago->codigo_transaccion);
+        if ($pi->status === 'succeeded') {
+            DB::table('pago')->where('id', $pagoId)->update(['estado' => 'pagado']);
+            $this->despuesDePago($pagoId, 'pagado', $usuario->esStaff() ? $usuario->id : null);
+
+            return ['pagado', 'Pago aprobado (verificado con 3D Secure).'];
+        }
+        if (in_array($pi->status, ['requires_action', 'processing'], true)) {
+            return ['pendiente', 'El pago todavía no se completó.'];
+        }
+        $stripe->cancelar($pi->id);
+        DB::table('pago')->where('id', $pagoId)->update(['estado' => 'rechazado']);
+        $this->despuesDePago($pagoId, 'rechazado', null);
+
+        return ['rechazado', 'No se pudo completar la verificación 3D Secure: el pago fue rechazado.'];
+    }
+
+    /**
+     * Pagos con Stripe que quedaron a medio 3D Secure (el cliente cerró la ventana): antes de un nuevo
+     * intento se consultan; si Stripe los cobró se marcan pagados, si no se cancelan y anulan.
+     */
+    public function sincronizarPendientesStripe(int $pedidoId): void
+    {
+        $pendientes = DB::table('pago')->where('pedido_id', $pedidoId)->where('pasarela', 'stripe')->where('estado', 'pendiente')->get(['id', 'codigo_transaccion']);
+        foreach ($pendientes as $p) {
+            $pi = app(StripeServicio::class)->consultar($p->codigo_transaccion);
+            if ($pi->status === 'succeeded') {
+                DB::table('pago')->where('id', $p->id)->update(['estado' => 'pagado']);
+                $this->despuesDePago($p->id, 'pagado', null);
+            } else {
+                app(StripeServicio::class)->cancelar($pi->id);
+                DB::table('pago')->where('id', $p->id)->update(['estado' => 'anulado']);
+            }
+        }
     }
 
     /** Efectos de un pago al quedar pagado/rechazado (también se usa al verificar pagos pendientes). */
