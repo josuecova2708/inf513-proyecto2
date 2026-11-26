@@ -6,8 +6,9 @@
  * Purpose: Generar los Diagramas de Navegación Web por actor en Enterprise Architect
  *          con auto-posicionamiento por capas semánticas y ruteo ortogonal multicarril
  *          100% automático (cero cruces por encima de cajas y separación de pares).
- *          Por ahora: Cliente. Después se agregan Administrador, Personal y Productor
- *          en este mismo archivo (ya no hace falta pasar coordenadas x, y manuales).
+ *          Un diagrama por actor (Cliente, Productor, Personal, Administrador). Cada uno
+ *          muestra TODO lo que el rol puede usar de verdad (matriz rol_permiso + puede()
+ *          del front), incluida la parte pública (inicio, catálogo, perfil, notificaciones).
  *
  * Basado en el código real del proyecto (Laravel 12 API + SPA React):
  * - routes/api.php, resources/js/App.jsx, database/seeders/MenuSeeder.php
@@ -556,45 +557,49 @@ function crearDiagramaCliente(rootPkg)
 }
 
 /* ============================================================
-   DIAGRAMA PRODUCTOR
-   La cuenta la crea FEDER (no hay registro público) y queda vinculada a un emprendimiento.
-   Solo lo propio del rol: lo común (catálogo, búsqueda, preferencias, perfil) ya está
-   en el diagrama del Cliente.
-   Panel (menú dinámico según permisos del rol Productor):
-   Comunidades (ver), Productores = su emprendimiento (ver/editar, foto, ofertas),
-   Producción (ver/reportar), Lotes (ver), Trazabilidad (ver), Notificaciones.
-   Flujos: reportar producción -> FEDER la valida (notificación "produccion_validada")
-   -> FEDER crea lotes -> el productor consulta sus lotes y la trazabilidad.
+   PARTES COMPARTIDAS (Productor, Personal y Administrador)
+   Cada diagrama muestra TODO lo que el rol puede usar de verdad según la matriz
+   rol_permiso (RolesPermisosSeeder) y las condiciones puede(...) del front.
+   Lo común a cualquier usuario autenticado se arma con estas funciones para que
+   las cajas y relaciones salgan idénticas en cada diagrama.
    ============================================================ */
 
-function crearDiagramaProductor(rootPkg)
+// Devuelve la función pagina(name, stereotype, attrs, methods) ligada al diagrama.
+function fabricaPaginas(ctx)
 {
-    // Con pocos módulos el doble bloque queda muy apaisado (~2.5:1); en un solo bloque
-    // vertical (~0.75:1) entra más grande en una hoja carta vertical.
-    var modoAnterior = MODO_HORIZONTAL_CARTA;
-    MODO_HORIZONTAL_CARTA = false;
-
-    var pkg = crearPaquete(rootPkg, "Navegación - Productor");
-    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Productor");
-    var ctx = crearContextoDiagrama(pkg, diagram);
-    var map = ctx.map;
-
-    // El motor calcula tamaños, columnas, bandas y rutas; no hace falta pasar x, y.
-    function pagina(name, stereotype, attrs, methods)
+    return function (name, stereotype, attrs, methods)
     {
         var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
         var alto = altoCaja(stereotype, attrs, methods);
         return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
-    }
+    };
+}
 
-    // ---- Base: actor + inicio + login (sin registro: la cuenta la crea FEDER) ----
-    // Lo común con el Cliente (catálogo, búsqueda, preferencias, perfil) ya está en su
-    // diagrama y se sobreentiende; aquí solo va lo propio del Productor.
-    crearActor(ctx, "Productor", 90, 100);
+/*
+ * Parte pública y de cuenta: Inicio (búsqueda y accesibilidad), Catálogo, Detalle de
+ * producto, Login (sin registro: la cuenta la crea FEDER), panel de inicio del rol,
+ * Mi perfil y Notificaciones.
+ * opts.encargo: el rol tiene encargos/crear (el detalle muestra el formulario de encargo).
+ * opts.notifPedido: el rol ve pedidos (la notificación enlaza al detalle del pedido).
+ * opts.panelAttrs / opts.panelMetodos: contenido de la página de inicio del panel.
+ */
+function agregarParteComun(ctx, pagina, actor, panel, opts)
+{
+    var map = ctx.map;
+
+    crearActor(ctx, actor, 90, 100);
 
     pagina("Inicio", "client page",
-        "menu",
-        "iniciarSesion\nirPanel");
+        "busqueda\nproductosDestacados\ncategorias\nmenu\ncontadorVisitas",
+        "buscar\nverCatalogo\nirPanel\ncerrarSesion");
+
+    pagina("BusquedaController", "Server Page",
+        "q",
+        "buscar");
+
+    pagina("frmPreferencias", "form page",
+        "tema\nmodo\ntamano_fuente\ncontraste\nbotón Guardar",
+        "");
 
     pagina("Login", "client page",
         "email\npassword",
@@ -605,25 +610,129 @@ function crearDiagramaProductor(rootPkg)
         "");
 
     pagina("AuthController", "Server Page",
-        "email\npassword",
-        "login\nme\nlogout");
+        "email\npassword\nnombre\napellido\ntelefono\ndireccion\ntema\nmodo",
+        "login\nme\nlogout\nactualizarPerfil\nguardarPreferencias");
 
-    // ---- Panel del productor ----
-    pagina("PanelProductor", "client page",
-        "usuario\nmenu\nComunidades\nProductores\nProducción\nLotes\nTrazabilidad\nNotificaciones\nlotesRecientes",
-        "reportarProduccion\ncerrarSesion");
+    pagina("Perfil", "client page",
+        "nombre\napellido\nemail\ntelefono\ndireccion",
+        "");
+
+    pagina("frmPerfil", "form page",
+        "nombre\napellido\nemail\ntelefono\ndireccion\npasswordActual\npassword\nconfirmarPassword\nbotón Guardar",
+        "");
+
+    pagina("Catalogo", "client page",
+        "q\ncategoria\nmodalidad\norden\nproductos",
+        "buscarProducto\nfiltrarCategoria\nordenar\nverProducto");
+
+    pagina("CatalogoController", "Server Page",
+        "q\ncategoria\nmodalidad\norden",
+        "index\nportada\nshow\ncategorias");
+
+    pagina("ProductoDetalle", "client page",
+        "nombre\nimagen\nprecio_venta\npresentacion\ndisponible\nemprendimiento",
+        opts.encargo ? "solicitarEncargo" : "");
+
+    if (opts.encargo)
+    {
+        pagina("frmEncargo", "form page",
+            "cantidad\nfecha_requerida\nobservacion\nbotón Solicitar Encargo",
+            "");
+    }
+
+    pagina(panel, "client page", opts.panelAttrs, opts.panelMetodos);
 
     pagina("DashboardController", "Server Page",
-        "",
-        "resumenUsuario");
+        "desde\nhasta",
+        opts.dashboard ? "resumenUsuario\nindex" : "resumenUsuario");
 
     pagina("Notificaciones", "client page",
         "notificaciones\nleida",
-        "leer\nleerTodas\nverProduccion");
+        opts.notifPedido ? "leer\nleerTodas\nverPedido" : "leer\nleerTodas");
 
     pagina("NotificacionController", "Server Page",
         "",
         "index\nnoLeidas\nleer\nleerTodas");
+
+    // ---- Relaciones comunes ----
+    asociacionActor(map, actor, "Inicio");
+
+    link(map, "Inicio", "Login");
+    link(map, "Inicio", "Catalogo");
+    link(map, "Inicio", panel);
+    link(map, "Inicio", "BusquedaController");
+    build(map, "BusquedaController", "Inicio");
+    composicion(map, "Inicio", "frmPreferencias");
+    submit(map, "frmPreferencias", "AuthController");
+
+    composicion(map, "Login", "frmLogin");
+    submit(map, "frmLogin", "AuthController");
+    redirect(map, "AuthController", panel);
+    response(map, "AuthController", "frmLogin");
+
+    link(map, "Catalogo", "CatalogoController");
+    build(map, "CatalogoController", "Catalogo");
+    link(map, "Catalogo", "ProductoDetalle");
+    build(map, "CatalogoController", "ProductoDetalle");
+
+    if (opts.encargo) composicion(map, "ProductoDetalle", "frmEncargo");
+
+    link(map, panel, "DashboardController");
+    build(map, "DashboardController", panel);
+    link(map, panel, "Catalogo");
+    link(map, panel, "Notificaciones");
+    link(map, panel, "Perfil");
+
+    composicion(map, "Perfil", "frmPerfil");
+    submit(map, "frmPerfil", "AuthController");
+    build(map, "AuthController", "Perfil");
+    response(map, "AuthController", "frmPerfil");
+
+    link(map, "Notificaciones", "NotificacionController");
+    build(map, "NotificacionController", "Notificaciones");
+}
+
+// Relaciones de la parte común que apuntan a cajas de los módulos del rol
+// (EncargoController, PedidoDetalle): se llaman después de crear esas cajas.
+function relacionarParteComun(map, opts)
+{
+    if (opts.encargo)
+    {
+        submit(map, "frmEncargo", "EncargoController");
+        response(map, "EncargoController", "frmEncargo");
+    }
+    if (opts.notifPedido) link(map, "Notificaciones", "PedidoDetalle");
+}
+
+/* ============================================================
+   DIAGRAMA PRODUCTOR
+   La cuenta la crea FEDER (no hay registro público) y queda vinculada a un emprendimiento.
+   Permisos del rol Productor: perfil (ver/editar), catálogo (ver), comunidades (ver),
+   emprendimientos (ver/editar), ofertas (ver/crear/eliminar), producción (ver/crear),
+   lotes y trazabilidad (ver), notificaciones. No compra: sin carrito ni encargos.
+   Flujos: reportar producción -> FEDER la valida (notificación) -> FEDER crea lotes
+   -> el productor consulta sus lotes y la trazabilidad.
+   ============================================================ */
+
+function crearDiagramaProductor(rootPkg)
+{
+    // Con ~30 cajas un solo bloque vertical entra más grande en la hoja carta.
+    var modoAnterior = MODO_HORIZONTAL_CARTA;
+    MODO_HORIZONTAL_CARTA = false;
+
+    var pkg = crearPaquete(rootPkg, "Navegación - Productor");
+    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Productor");
+    var ctx = crearContextoDiagrama(pkg, diagram);
+    var map = ctx.map;
+    var pagina = fabricaPaginas(ctx);
+
+    agregarParteComun(ctx, pagina, "Productor", "PanelProductor", {
+        encargo: false,
+        notifPedido: false,
+        dashboard: false,
+        panelAttrs: "usuario\nmenu\nComunidades\nProductores\nProducción\nLotes\nTrazabilidad\nNotificaciones\nMi perfil\nmiEmprendimiento\nlotesRecientes",
+        panelMetodos: "reportarProduccion\ncerrarSesion"
+    });
 
     // ---- Comunidades (solo lectura) ----
     pagina("Comunidades", "client page",
@@ -694,30 +803,11 @@ function crearDiagramaProductor(rootPkg)
         "");
 
     // ---- Relaciones Productor ----
-    asociacionActor(map, "Productor", "Inicio");
-
-    // Inicio y login
-    link(map, "Inicio", "Login");
-    link(map, "Inicio", "PanelProductor");
-    composicion(map, "Login", "frmLogin");
-    submit(map, "frmLogin", "AuthController");
-    redirect(map, "AuthController", "PanelProductor");
-    response(map, "AuthController", "frmLogin");
-
-    // Panel
-    link(map, "PanelProductor", "DashboardController");
-    build(map, "DashboardController", "PanelProductor");
     link(map, "PanelProductor", "Comunidades");
     link(map, "PanelProductor", "MisEmprendimientos");
     link(map, "PanelProductor", "Produccion");
     link(map, "PanelProductor", "Lotes");
     link(map, "PanelProductor", "Trazabilidad");
-    link(map, "PanelProductor", "Notificaciones");
-
-    // Notificaciones (p. ej. producción validada o rechazada)
-    link(map, "Notificaciones", "NotificacionController");
-    build(map, "NotificacionController", "Notificaciones");
-    link(map, "Notificaciones", "Produccion");
 
     // Comunidades
     link(map, "Comunidades", "ComunidadController");
@@ -762,65 +852,39 @@ function crearDiagramaProductor(rootPkg)
     MODO_HORIZONTAL_CARTA = modoAnterior;
 }
 
-/* ============================================================
-   DIAGRAMA PERSONAL
-   Personal de FEDER: toda la operación del día a día.
-   Solo lo propio del rol (lo común: catálogo público, búsqueda, preferencias, perfil,
-   notificaciones, trazabilidad, foto/ofertas del emprendimiento y planes de pago ya
-   están en los diagramas del Cliente y del Productor).
-   Menú: Dashboard · Operación (Comunidades, Productores, Producción, Lotes) ·
-   Catálogo e inventario (Categorías, Productos, Inventario, Alertas) ·
-   Comercial (Encargos, Pedidos, Entregas) · Pagos · Análisis (Indicadores financieros, Reportes).
-   Flujos: valida la producción y crea lotes, ajusta inventario, gestiona encargos,
-   avanza el estado de los pedidos (programa la entrega), registra y verifica pagos
-   (efectivo, QR, transferencia) y despacha entregas.
-   ============================================================ */
-
-function crearDiagramaPersonal(rootPkg)
+/*
+ * Módulos del staff de FEDER (Personal y Administrador): toda la operación del día a día.
+ * esAdmin = true agrega lo que solo tiene el Administrador sobre estos mismos módulos
+ * (crear/editar/eliminar usuarios, subir el QR de cobro).
+ */
+function agregarModulosStaff(ctx, pagina, panel, esAdmin)
 {
-    var pkg = crearPaquete(rootPkg, "Navegación - Personal");
-    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Personal");
-    var ctx = crearContextoDiagrama(pkg, diagram);
     var map = ctx.map;
-
-    function pagina(name, stereotype, attrs, methods)
-    {
-        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
-        var alto = altoCaja(stereotype, attrs, methods);
-        return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
-    }
-
-    // ---- Base: actor + inicio + login ----
-    crearActor(ctx, "Personal", 90, 100);
-
-    pagina("Inicio", "client page",
-        "menu",
-        "iniciarSesion\nirPanel");
-
-    pagina("Login", "client page",
-        "email\npassword",
-        "");
-
-    pagina("frmLogin", "form page",
-        "email\npassword\nbotón Iniciar Sesión",
-        "");
-
-    pagina("AuthController", "Server Page",
-        "email\npassword",
-        "login\nme\nlogout");
-
-    pagina("PanelPersonal", "client page",
-        "usuario\nmenu\nDashboard\nComunidades\nProductores\nProducción\nLotes\nCategorías\nProductos\nInventario\nAlertas\nEncargos\nPedidos\nEntregas\nPagos\nIndicadores financieros\nReportes",
-        "cerrarSesion");
 
     // ---- Dashboard ----
     pagina("Dashboard", "client page",
         "ventasMes\npedidosPendientes\nstockBajo\nvisitas\ngraficos",
         "verIndicadores");
 
-    pagina("DashboardController", "Server Page",
-        "",
-        "index");
+    // ---- Usuarios (Personal: solo consulta; Administrador: CRUD) ----
+    pagina("Usuarios", "client page",
+        "usuarios\nq\nrol_id\nestado",
+        esAdmin ? "buscarUsuario\ncrearUsuario\neditarUsuario\ndarDeBaja" : "buscarUsuario\nlistarUsuario");
+
+    if (esAdmin)
+    {
+        pagina("frmUsuario", "form page",
+            "rol_id\nnombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nestado\nbotón Guardar",
+            "");
+    }
+
+    pagina("UsuarioController", "Server Page",
+        esAdmin ? "rol_id\nnombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nestado" : "q\nrol_id\nestado",
+        esAdmin ? "index\nshow\nstore\nupdate\ndestroy" : "index\nshow");
+
+    pagina("RolController", "Server Page",
+        esAdmin ? "permisos" : "",
+        esAdmin ? "index\npermisos\nguardarPermisos" : "index");
 
     // ---- Comunidades (CRUD) ----
     pagina("Comunidades", "client page",
@@ -835,23 +899,39 @@ function crearDiagramaPersonal(rootPkg)
         "nombre\nmunicipio\nprovincia\ndepartamento\ndescripcion",
         "index\nstore\nupdate\ndestroy");
 
-    // ---- Productores / emprendimientos (CRUD) ----
+    // ---- Productores / emprendimientos (CRUD + foto y ofertas) ----
     pagina("Emprendimientos", "client page",
         "emprendimientos\nq\ncomunidad_id\nrubro\nestado",
-        "buscarProductor\ncrearProductor\neditarProductor\neliminarProductor");
+        "buscarProductor\ncrearProductor\neditarProductor\neliminarProductor\nverDetalle");
 
     pagina("frmEmprendimiento", "form page",
         "comunidad_id\nusuario_id\nnombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nestado\nbotón Guardar",
         "");
 
     pagina("EmprendimientoController", "Server Page",
-        "comunidad_id\nusuario_id\nnombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nestado",
-        "index\nshow\nstore\nupdate\ndestroy");
+        "comunidad_id\nusuario_id\nnombre\nrubro\nresponsable\nci_nit\ntelefono\ndireccion\nlatitud\nlongitud\nestado\nimagen\nproducto_id\nprecio_referencia\ntemporada",
+        "index\nshow\nstore\nupdate\ndestroy\nsubirImagen\nquitarImagen\nguardarOferta\neliminarOferta");
 
-    // ---- Producción (validar) -> Lotes ----
+    pagina("EmprendimientoDetalle", "client page",
+        "nombre\ncomunidad\nimagen\nofertas\nproducciones",
+        "subirFoto\nquitarFoto\nagregarOferta\nquitarOferta");
+
+    pagina("frmImagenEmprendimiento", "form page",
+        "imagen\nbotón Subir Foto",
+        "");
+
+    pagina("frmOferta", "form page",
+        "producto_id\nprecio_referencia\ntemporada\nbotón Agregar Oferta",
+        "");
+
+    // ---- Producción (reportar, validar, eliminar) -> Lotes ----
     pagina("Produccion", "client page",
         "producciones\nestado\ntipo\nq",
-        "filtrar\nvalidarProduccion\ncrearLote");
+        "filtrar\nreportarProduccion\nvalidarProduccion\ncrearLote\neliminarProduccion");
+
+    pagina("frmProduccion", "form page",
+        "emprendimiento_id\nproducto_id\ntipo\ncantidad\nunidad_medida\nfecha_produccion\nfecha_disponible\nprecio_propuesto\nprocedencia\nobservacion\nbotón Reportar Producción",
+        "");
 
     pagina("frmValidarProduccion", "form page",
         "estado\nobservacion\nbotón Validar\nbotón Rechazar",
@@ -862,12 +942,12 @@ function crearDiagramaPersonal(rootPkg)
         "");
 
     pagina("ProduccionController", "Server Page",
-        "estado\ntipo\nq\nobservacion",
-        "index\nvalidar\ndestroy");
+        "emprendimiento_id\nproducto_id\ntipo\ncantidad\nunidad_medida\nestado\nobservacion\nq",
+        "index\nstore\nvalidar\ndestroy");
 
     pagina("Lotes", "client page",
         "lotes\nestado\nproducto_id\nq",
-        "filtrar\neditarLote\najustarInventario");
+        "filtrar\neditarLote\najustarInventario\nverTrazabilidad");
 
     pagina("frmEditarLote", "form page",
         "fecha_vencimiento\ncosto_unitario\nestado\nbotón Guardar",
@@ -878,8 +958,16 @@ function crearDiagramaPersonal(rootPkg)
         "");
 
     pagina("LoteController", "Server Page",
-        "produccion_id\ncodigo\ncantidad\nfecha_vencimiento\ncosto_unitario\nestado\nversion",
-        "index\nstore\nupdate");
+        "produccion_id\ncodigo\ncantidad\nfecha_vencimiento\ncosto_unitario\nestado\nversion\nnumero",
+        "index\nstore\nupdate\ntrazabilidadLote\ntrazabilidadPedido");
+
+    pagina("Trazabilidad", "client page",
+        "lote\nproduccion\nemprendimiento\ncomunidad\npedidos",
+        "buscarLote\nbuscarPedido\nverPedido");
+
+    pagina("frmTrazabilidad", "form page",
+        "codigo_lote\nnumero_pedido\nbotón Buscar",
+        "");
 
     // ---- Catálogo (categorías y productos) ----
     pagina("Categorias", "client page",
@@ -930,15 +1018,19 @@ function crearDiagramaPersonal(rootPkg)
     // ---- Encargos ----
     pagina("Encargos", "client page",
         "encargos\ncliente\nestado",
-        "filtrar\naceptar\nrechazar\nmarcarDisponible");
+        "filtrar\naceptar\nrechazar\nmarcarDisponible\ncancelarEncargo");
 
     pagina("frmEstadoEncargo", "form page",
         "estado\nobservacion\nbotón Guardar",
         "");
 
+    pagina("frmCancelarEncargo", "form page",
+        "botón Cancelar Encargo",
+        "");
+
     pagina("EncargoController", "Server Page",
-        "estado\nobservacion",
-        "index\nshow\ncambiarEstado");
+        "fecha_requerida\nobservacion\nitems\nestado",
+        "index\nshow\nstore\ncambiarEstado\ncancelar");
 
     // ---- Pedidos ----
     pagina("Pedidos", "client page",
@@ -946,25 +1038,33 @@ function crearDiagramaPersonal(rootPkg)
         "buscarPedido\nverPedido");
 
     pagina("PedidoDetalle", "client page",
-        "numero\ncliente\nestado\ndetalle\nentrega\npagos\nsaldo",
-        "confirmar\nprogramarEntrega\nmarcarEntregado\ncancelar\nregistrarPago");
+        "numero\ncliente\nestado\ndetalle\nentrega\npagos\nplan\ncuotas\nsaldo",
+        "confirmar\nprogramarEntrega\nmarcarEntregado\ncancelar\nregistrarPago\npagarCuota");
 
     pagina("frmEstadoPedido", "form page",
         "estado\nfecha_programada\nbotón Avanzar Estado",
+        "");
+
+    pagina("frmCancelarPedido", "form page",
+        "botón Cancelar Pedido",
         "");
 
     pagina("frmRegistrarPago", "form page",
         "metodo_pago_id\nmonto\nreferencia\nbotón Registrar Pago",
         "");
 
+    pagina("frmPagoCuota", "form page",
+        "metodo_pago_id\nreferencia\nbotón Pagar Cuota",
+        "");
+
     pagina("PedidoController", "Server Page",
         "estado\nfecha_programada\nq\ndesde\nhasta",
         "index\nshow\ncambiarEstado\ncancelar");
 
-    // ---- Pagos (verificar) ----
+    // ---- Pagos (verificar) y planes de pago ----
     pagina("Pagos", "client page",
         "pagos\ncliente\nmetodo\nestado\nq",
-        "filtrar\nverificarPago\nrechazarPago");
+        "filtrar\nverificarPago\nrechazarPago\nverPedido");
 
     pagina("frmVerificarPago", "form page",
         "estado\nbotón Confirmar\nbotón Rechazar",
@@ -972,7 +1072,35 @@ function crearDiagramaPersonal(rootPkg)
 
     pagina("PagoController", "Server Page",
         "metodo_pago_id\nmonto\nreferencia\nestado",
-        "index\npagar\nverificar");
+        "index\nmetodos\npagar\nverificar");
+
+    pagina("PlanesPago", "client page",
+        "planes\ncuotas\nestado",
+        "listarPlan\npagarCuota\nverPedido");
+
+    pagina("frmPagoCuotaPlan", "form page",
+        "metodo_pago_id\nreferencia\nbotón Pagar Cuota",
+        "");
+
+    pagina("PlanPagoController", "Server Page",
+        "metodo_pago_id\nreferencia",
+        "index\npagarCuota");
+
+    // ---- QR de cobro (Personal: solo ver; Administrador: subir) ----
+    pagina("QrCobro", "client page",
+        "qrActivo\nhistorial",
+        esAdmin ? "subirQr" : "");
+
+    if (esAdmin)
+    {
+        pagina("frmSubirQr", "form page",
+            "imagen\nbotón Subir QR",
+            "");
+    }
+
+    pagina("QrController", "Server Page",
+        esAdmin ? "imagen" : "",
+        esAdmin ? "index\nstore\nimagen" : "index\nimagen");
 
     // ---- Entregas ----
     pagina("Entregas", "client page",
@@ -1012,36 +1140,41 @@ function crearDiagramaPersonal(rootPkg)
         "tipo\ndesde\nhasta",
         "generar");
 
-    // ---- Relaciones Personal ----
-    asociacionActor(map, "Personal", "Inicio");
+    // ---- Relaciones de los módulos del staff ----
+    link(map, panel, "Dashboard");
+    link(map, panel, "Usuarios");
+    link(map, panel, "Comunidades");
+    link(map, panel, "Emprendimientos");
+    link(map, panel, "Produccion");
+    link(map, panel, "Lotes");
+    link(map, panel, "Trazabilidad");
+    link(map, panel, "Categorias");
+    link(map, panel, "Productos");
+    link(map, panel, "Inventario");
+    link(map, panel, "Alertas");
+    link(map, panel, "Encargos");
+    link(map, panel, "Pedidos");
+    link(map, panel, "Entregas");
+    link(map, panel, "Pagos");
+    link(map, panel, "PlanesPago");
+    link(map, panel, "QrCobro");
+    link(map, panel, "Finanzas");
+    link(map, panel, "Reportes");
 
-    link(map, "Inicio", "Login");
-    link(map, "Inicio", "PanelPersonal");
-    composicion(map, "Login", "frmLogin");
-    submit(map, "frmLogin", "AuthController");
-    redirect(map, "AuthController", "PanelPersonal");
-    response(map, "AuthController", "frmLogin");
-
-    // Menú
-    link(map, "PanelPersonal", "Dashboard");
-    link(map, "PanelPersonal", "Comunidades");
-    link(map, "PanelPersonal", "Emprendimientos");
-    link(map, "PanelPersonal", "Produccion");
-    link(map, "PanelPersonal", "Lotes");
-    link(map, "PanelPersonal", "Categorias");
-    link(map, "PanelPersonal", "Productos");
-    link(map, "PanelPersonal", "Inventario");
-    link(map, "PanelPersonal", "Alertas");
-    link(map, "PanelPersonal", "Encargos");
-    link(map, "PanelPersonal", "Pedidos");
-    link(map, "PanelPersonal", "Entregas");
-    link(map, "PanelPersonal", "Pagos");
-    link(map, "PanelPersonal", "Finanzas");
-    link(map, "PanelPersonal", "Reportes");
-
-    // Dashboard
+    // Dashboard (el mismo controlador arma el panel de inicio con resumenUsuario)
     link(map, "Dashboard", "DashboardController");
     build(map, "DashboardController", "Dashboard");
+
+    // Usuarios (el combo de roles sale de GET /roles: petición auxiliar = «link»)
+    link(map, "Usuarios", "UsuarioController");
+    build(map, "UsuarioController", "Usuarios");
+    link(map, "Usuarios", "RolController");
+    if (esAdmin)
+    {
+        composicion(map, "Usuarios", "frmUsuario");
+        submit(map, "frmUsuario", "UsuarioController");
+        response(map, "UsuarioController", "frmUsuario");
+    }
 
     // Comunidades
     link(map, "Comunidades", "ComunidadController");
@@ -1050,16 +1183,33 @@ function crearDiagramaPersonal(rootPkg)
     submit(map, "frmComunidad", "ComunidadController");
     response(map, "ComunidadController", "frmComunidad");
 
-    // Productores
+    // Productores (combos: comunidades, roles y usuarios productores = GET auxiliares)
     link(map, "Emprendimientos", "EmprendimientoController");
     build(map, "EmprendimientoController", "Emprendimientos");
     composicion(map, "Emprendimientos", "frmEmprendimiento");
     submit(map, "frmEmprendimiento", "EmprendimientoController");
     response(map, "EmprendimientoController", "frmEmprendimiento");
+    link(map, "Emprendimientos", "ComunidadController");
+    link(map, "Emprendimientos", "UsuarioController");
+    link(map, "Emprendimientos", "EmprendimientoDetalle");
+    build(map, "EmprendimientoController", "EmprendimientoDetalle");
 
-    // Producción: validar y crear lote
+    composicion(map, "EmprendimientoDetalle", "frmImagenEmprendimiento");
+    submit(map, "frmImagenEmprendimiento", "EmprendimientoController");
+    response(map, "EmprendimientoController", "frmImagenEmprendimiento");
+    composicion(map, "EmprendimientoDetalle", "frmOferta");
+    submit(map, "frmOferta", "EmprendimientoController");
+    response(map, "EmprendimientoController", "frmOferta");
+    link(map, "EmprendimientoDetalle", "ProductoController"); // combo de productos
+
+    // Producción: reportar, validar y crear lote
     link(map, "Produccion", "ProduccionController");
     build(map, "ProduccionController", "Produccion");
+    composicion(map, "Produccion", "frmProduccion");
+    submit(map, "frmProduccion", "ProduccionController");
+    response(map, "ProduccionController", "frmProduccion");
+    link(map, "Produccion", "EmprendimientoController"); // combo de emprendimientos
+    link(map, "Produccion", "ProductoController");       // combo de productos
     composicion(map, "Produccion", "frmValidarProduccion");
     submit(map, "frmValidarProduccion", "ProduccionController");
     response(map, "ProduccionController", "frmValidarProduccion");
@@ -1068,7 +1218,7 @@ function crearDiagramaPersonal(rootPkg)
     submit(map, "frmLote", "LoteController");
     response(map, "LoteController", "frmLote");
 
-    // Lotes: editar y ajustar inventario
+    // Lotes: editar, ajustar inventario y ver trazabilidad
     link(map, "Lotes", "LoteController");
     build(map, "LoteController", "Lotes");
     composicion(map, "Lotes", "frmEditarLote");
@@ -1077,6 +1227,13 @@ function crearDiagramaPersonal(rootPkg)
     composicion(map, "Lotes", "frmMovimiento");
     submit(map, "frmMovimiento", "InventarioController");
     response(map, "InventarioController", "frmMovimiento");
+    link(map, "Lotes", "Trazabilidad");
+
+    composicion(map, "Trazabilidad", "frmTrazabilidad");
+    submit(map, "frmTrazabilidad", "LoteController");
+    build(map, "LoteController", "Trazabilidad");
+    response(map, "LoteController", "frmTrazabilidad");
+    link(map, "Trazabilidad", "PedidoDetalle");
 
     // Categorías y productos
     link(map, "Categorias", "CategoriaController");
@@ -1090,6 +1247,7 @@ function crearDiagramaPersonal(rootPkg)
     composicion(map, "Productos", "frmProducto");
     submit(map, "frmProducto", "ProductoController");
     response(map, "ProductoController", "frmProducto");
+    link(map, "Productos", "CategoriaController"); // combo de categorías
 
     // Inventario y alertas
     link(map, "Inventario", "InventarioController");
@@ -1106,8 +1264,12 @@ function crearDiagramaPersonal(rootPkg)
     composicion(map, "Encargos", "frmEstadoEncargo");
     submit(map, "frmEstadoEncargo", "EncargoController");
     response(map, "EncargoController", "frmEstadoEncargo");
+    composicion(map, "Encargos", "frmCancelarEncargo");
+    submit(map, "frmCancelarEncargo", "EncargoController");
 
-    // Pedidos: avanzar estado (pendiente -> confirmado -> listo_entrega -> entregado) y cobrar
+    // Pedidos: avanzar estado (pendiente -> confirmado -> listo_entrega -> entregado),
+    // cancelar y cobrar. Tras cada acción la vista vuelve a pedir el pedido a
+    // PedidoController (un solo build); el combo de métodos sale de GET /metodos-pago.
     link(map, "Pedidos", "PedidoController");
     build(map, "PedidoController", "Pedidos");
     link(map, "Pedidos", "PedidoDetalle");
@@ -1115,11 +1277,14 @@ function crearDiagramaPersonal(rootPkg)
     composicion(map, "PedidoDetalle", "frmEstadoPedido");
     submit(map, "frmEstadoPedido", "PedidoController");
     response(map, "PedidoController", "frmEstadoPedido");
-    // Tras cobrar, la vista vuelve a pedir el pedido a PedidoController (un solo build);
-    // el combo de métodos sale de GET /metodos-pago (petición auxiliar = «link»).
+    composicion(map, "PedidoDetalle", "frmCancelarPedido");
+    submit(map, "frmCancelarPedido", "PedidoController");
     composicion(map, "PedidoDetalle", "frmRegistrarPago");
     submit(map, "frmRegistrarPago", "PagoController");
     response(map, "PagoController", "frmRegistrarPago");
+    composicion(map, "PedidoDetalle", "frmPagoCuota");
+    submit(map, "frmPagoCuota", "PlanPagoController");
+    response(map, "PlanPagoController", "frmPagoCuota");
     link(map, "PedidoDetalle", "PagoController");
 
     // Pagos: verificar QR / transferencia
@@ -1128,6 +1293,24 @@ function crearDiagramaPersonal(rootPkg)
     composicion(map, "Pagos", "frmVerificarPago");
     submit(map, "frmVerificarPago", "PagoController");
     link(map, "Pagos", "PedidoDetalle");
+
+    // Planes de pago: cobrar la siguiente cuota
+    link(map, "PlanesPago", "PlanPagoController");
+    build(map, "PlanPagoController", "PlanesPago");
+    composicion(map, "PlanesPago", "frmPagoCuotaPlan");
+    submit(map, "frmPagoCuotaPlan", "PlanPagoController");
+    response(map, "PlanPagoController", "frmPagoCuotaPlan");
+    link(map, "PlanesPago", "PedidoDetalle");
+
+    // QR de cobro
+    link(map, "QrCobro", "QrController");
+    build(map, "QrController", "QrCobro");
+    if (esAdmin)
+    {
+        composicion(map, "QrCobro", "frmSubirQr");
+        submit(map, "frmSubirQr", "QrController");
+        response(map, "QrController", "frmSubirQr");
+    }
 
     // Entregas
     link(map, "Entregas", "EntregaController");
@@ -1148,73 +1331,69 @@ function crearDiagramaPersonal(rootPkg)
     submit(map, "frmFiltrosReporte", "ReporteController");
     build(map, "ReporteController", "Reportes");
     response(map, "ReporteController", "frmFiltrosReporte");
+}
+
+/* ============================================================
+   DIAGRAMA PERSONAL
+   Personal de FEDER: toda la operación del día a día.
+   Permisos: dashboard, usuarios (ver), perfil, comunidades, emprendimientos, ofertas,
+   producción, lotes, catálogo, inventario, encargos y pedidos (CRUD), pagos, planes de
+   pago y entregas (ver/crear/editar), QR (ver), notificaciones, finanzas, reportes.
+   Menú: Dashboard · Administración (Usuarios) · Operación (Comunidades, Productores,
+   Producción, Lotes, Trazabilidad) · Catálogo e inventario (Categorías, Productos,
+   Inventario, Alertas) · Comercial (Tienda, Encargos, Pedidos, Entregas) ·
+   Pagos (Pagos, Planes de pago, QR de cobro) · Análisis · Notificaciones · Mi perfil.
+   No tiene carrito ni métodos de pago propios (no compra).
+   ============================================================ */
+
+function crearDiagramaPersonal(rootPkg)
+{
+    var pkg = crearPaquete(rootPkg, "Navegación - Personal");
+    var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Personal");
+    var ctx = crearContextoDiagrama(pkg, diagram);
+    var pagina = fabricaPaginas(ctx);
+
+    var comun = {
+        encargo: true,
+        notifPedido: true,
+        dashboard: true,
+        panelAttrs: "usuario\nmenu\nDashboard\nUsuarios\nComunidades\nProductores\nProducción\nLotes\nTrazabilidad\nCategorías\nProductos\nInventario\nAlertas\nTienda\nEncargos\nPedidos\nEntregas\nPagos\nPlanes de pago\nQR de cobro\nIndicadores financieros\nReportes\nNotificaciones\nMi perfil\npendientes",
+        panelMetodos: "verDashboard\ncerrarSesion"
+    };
+    agregarParteComun(ctx, pagina, "Personal", "PanelPersonal", comun);
+    agregarModulosStaff(ctx, pagina, "PanelPersonal", false);
+    relacionarParteComun(ctx.map, comun);
 
     finalizarDiagrama(ctx);
 }
 
 /* ============================================================
    DIAGRAMA ADMINISTRADOR
-   Solo lo que el Personal NO tiene: gestionar usuarios, roles y matriz de permisos,
-   bitácora de auditoría y subir el QR de cobro de FEDER. Todo lo operativo
-   (producción, catálogo, pedidos, pagos, reportes...) lo hace igual que el Personal
-   (ver su diagrama), con el permiso extra de eliminar.
+   Tiene todo lo del Personal (con permiso de eliminar) y además: gestionar usuarios
+   (CRUD), roles y matriz de permisos, bitácora de auditoría, subir el QR de cobro de
+   FEDER y ver Mis métodos de pago (solo lectura).
    ============================================================ */
 
 function crearDiagramaAdministrador(rootPkg)
 {
-    // Pocos módulos: un solo bloque vertical entra más grande en la hoja.
-    var modoAnterior = MODO_HORIZONTAL_CARTA;
-    MODO_HORIZONTAL_CARTA = false;
-
     var pkg = crearPaquete(rootPkg, "Navegación - Administrador");
     var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Administrador");
     var ctx = crearContextoDiagrama(pkg, diagram);
     var map = ctx.map;
+    var pagina = fabricaPaginas(ctx);
 
-    function pagina(name, stereotype, attrs, methods)
-    {
-        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
-        var alto = altoCaja(stereotype, attrs, methods);
-        return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
-    }
+    var comun = {
+        encargo: true,
+        notifPedido: true,
+        dashboard: true,
+        panelAttrs: "usuario\nmenu\nDashboard\nUsuarios\nRoles y permisos\nBitácora\nComunidades\nProductores\nProducción\nLotes\nTrazabilidad\nCategorías\nProductos\nInventario\nAlertas\nTienda\nEncargos\nPedidos\nEntregas\nPagos\nPlanes de pago\nMis métodos de pago\nQR de cobro\nIndicadores financieros\nReportes\nNotificaciones\nMi perfil\npendientes",
+        panelMetodos: "verDashboard\ncerrarSesion"
+    };
+    agregarParteComun(ctx, pagina, "Administrador", "PanelAdministrador", comun);
+    agregarModulosStaff(ctx, pagina, "PanelAdministrador", true);
+    relacionarParteComun(map, comun);
 
-    // ---- Base: actor + inicio + login ----
-    crearActor(ctx, "Administrador", 90, 100);
-
-    pagina("Inicio", "client page",
-        "menu",
-        "iniciarSesion\nirPanel");
-
-    pagina("Login", "client page",
-        "email\npassword",
-        "");
-
-    pagina("frmLogin", "form page",
-        "email\npassword\nbotón Iniciar Sesión",
-        "");
-
-    pagina("AuthController", "Server Page",
-        "email\npassword",
-        "login\nme\nlogout");
-
-    pagina("PanelAdministrador", "client page",
-        "usuario\nmenu\nUsuarios\nRoles y permisos\nBitácora\nQR de cobro\nmódulos del Personal",
-        "cerrarSesion");
-
-    // ---- Usuarios (CRUD) ----
-    pagina("Usuarios", "client page",
-        "usuarios\nq\nrol_id\nestado",
-        "buscarUsuario\ncrearUsuario\neditarUsuario\neliminarUsuario");
-
-    pagina("frmUsuario", "form page",
-        "rol_id\nnombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nestado\nbotón Guardar",
-        "");
-
-    pagina("UsuarioController", "Server Page",
-        "rol_id\nnombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nestado",
-        "index\nshow\nstore\nupdate\ndestroy");
-
-    // ---- Roles y matriz de permisos ----
+    // ---- Solo Administrador: roles, bitácora y métodos de pago (ver) ----
     pagina("Roles", "client page",
         "roles\nmodulos\nmatriz",
         "elegirRol\nverMatriz\nmarcarPermiso");
@@ -1223,11 +1402,6 @@ function crearDiagramaAdministrador(rootPkg)
         "permiso_id\nver\ncrear\neditar\neliminar\nbotón Guardar Permisos",
         "");
 
-    pagina("RolController", "Server Page",
-        "permisos",
-        "index\npermisos\nguardarPermisos");
-
-    // ---- Bitácora de auditoría ----
     pagina("Bitacora", "client page",
         "eventos\nresumen\npaginacion",
         "filtrarEvento\npaginar");
@@ -1240,41 +1414,17 @@ function crearDiagramaAdministrador(rootPkg)
         "accion\nq\nip\nrecurso\ndesde\nhasta",
         "index\nresumen");
 
-    // ---- QR de cobro de FEDER ----
-    pagina("QrCobro", "client page",
-        "qrActivo\nhistorial",
-        "subirQr");
+    pagina("MisMetodosPago", "client page",
+        "tarjetas\ncuentas\npredeterminado",
+        "listar");
 
-    pagina("frmSubirQr", "form page",
-        "imagen\nbotón Subir QR",
-        "");
+    pagina("MetodoPagoUsuarioController", "Server Page",
+        "",
+        "index");
 
-    pagina("QrController", "Server Page",
-        "imagen",
-        "index\nstore\nimagen");
-
-    // ---- Relaciones Administrador ----
-    asociacionActor(map, "Administrador", "Inicio");
-
-    link(map, "Inicio", "Login");
-    link(map, "Inicio", "PanelAdministrador");
-    composicion(map, "Login", "frmLogin");
-    submit(map, "frmLogin", "AuthController");
-    redirect(map, "AuthController", "PanelAdministrador");
-    response(map, "AuthController", "frmLogin");
-
-    link(map, "PanelAdministrador", "Usuarios");
     link(map, "PanelAdministrador", "Roles");
     link(map, "PanelAdministrador", "Bitacora");
-    link(map, "PanelAdministrador", "QrCobro");
-
-    // Usuarios (el combo de roles sale de GET /roles: petición auxiliar = «link»)
-    link(map, "Usuarios", "UsuarioController");
-    build(map, "UsuarioController", "Usuarios");
-    composicion(map, "Usuarios", "frmUsuario");
-    submit(map, "frmUsuario", "UsuarioController");
-    response(map, "UsuarioController", "frmUsuario");
-    link(map, "Usuarios", "RolController");
+    link(map, "PanelAdministrador", "MisMetodosPago");
 
     // Roles y permisos
     link(map, "Roles", "RolController");
@@ -1289,15 +1439,11 @@ function crearDiagramaAdministrador(rootPkg)
     composicion(map, "Bitacora", "frmFiltrosBitacora");
     submit(map, "frmFiltrosBitacora", "BitacoraController");
 
-    // QR de cobro
-    link(map, "QrCobro", "QrController");
-    build(map, "QrController", "QrCobro");
-    composicion(map, "QrCobro", "frmSubirQr");
-    submit(map, "frmSubirQr", "QrController");
-    response(map, "QrController", "frmSubirQr");
+    // Mis métodos de pago (solo consulta)
+    link(map, "MisMetodosPago", "MetodoPagoUsuarioController");
+    build(map, "MetodoPagoUsuarioController", "MisMetodosPago");
 
     finalizarDiagrama(ctx);
-    MODO_HORIZONTAL_CARTA = modoAnterior;
 }
 
 /* ============================================================
