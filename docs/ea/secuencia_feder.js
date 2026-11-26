@@ -364,21 +364,11 @@ function colocar(diag, elementId, l, t, r, b) {
   return o;
 }
 
-// "Use Rectangle Notation" (clic derecho > Advanced en EA): dibuja el objeto como
-// rectángulo con «boundary» / «control» / «entity» en vez del ícono del estereotipo.
-function usarRectangulo(diag, obj) {
-  var st = obj.Style;
-  if (st == null) st = "";
-  if (st.indexOf("UCRect=") >= 0) st = st.replace(/UCRect=\d/, "UCRect=1");
-  else st = st + (st == "" || st.charAt(st.length - 1) == ";" ? "" : ";") + "UCRect=1;";
-  obj.Style = st;
-  obj.Update();
-  // respaldo directo en la BD por si la versión de EA no guarda Style desde la API
-  try {
-    Repository.Execute("UPDATE t_diagramobjects SET ObjectStyle='" + st + "' WHERE Diagram_ID=" +
-                       diag.DiagramID + " AND Object_ID=" + obj.ElementID);
-  } catch (eR) {}
-}
+// EA dibuja boundary / control / entity con su ícono (círculos) y no deja cambiarlo a
+// rectángulo. Con un espacio no separable al final, EA ya no reconoce el estereotipo:
+// lo dibuja como rectángulo y el texto se sigue leyendo «boundary», «control», «entity».
+var ESPACIO_DURO = String.fromCharCode(160);
+function estereotipoRectangulo(tipo) { return tipo + ESPACIO_DURO; }
 
 // ---- Validación (antes de tocar el modelo) -------------------------
 function validarCU(CU) {
@@ -453,8 +443,7 @@ function generarCU(CU, raiz) {
   log("--- " + nombreCarpeta);
   var pkg = obtenerPaquete(raiz, nombreCarpeta);
 
-  // Participantes: actor o Object con estereotipo (al colocarlos se activa la
-  // notación de rectángulo para que no salgan los íconos de boundary/control/entity)
+  // Participantes: actor o Object con estereotipo (rectángulo, ver estereotipoRectangulo)
   var el = {};
   for (var i = 0; i < CU.participantes.length; i++) {
     var p = CU.participantes[i], e;
@@ -462,7 +451,7 @@ function generarCU(CU, raiz) {
       e = pkg.Elements.AddNew(p.nombre, "Actor");
     } else {
       e = pkg.Elements.AddNew(p.nombre, "Object");
-      e.Stereotype = p.tipo;
+      e.Stereotype = estereotipoRectangulo(p.tipo);
     }
     e.Update();
     el[p.id] = e;
@@ -482,8 +471,7 @@ function generarCU(CU, raiz) {
   for (var k = 0; k < CU.participantes.length; k++) {
     var pp = CU.participantes[k], c = col.cx[k], w = col.w[k];
     var h = (pp.tipo == "actor") ? ACT_H : OBJ_H;
-    var dobj = colocar(diag, el[pp.id].ElementID, c - w / 2, Y_TOP, c + w / 2, Y_TOP + h);
-    if (pp.tipo != "actor") usarRectangulo(diag, dobj);
+    colocar(diag, el[pp.id].ElementID, c - w / 2, Y_TOP, c + w / 2, Y_TOP + h);
   }
   diag.DiagramObjects.Refresh();
 
