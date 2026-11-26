@@ -4,8 +4,8 @@
  * Script Name: DiagramasNavegacion_FEDER
  * Proyecto: FEDER - INF513 (Proyecto 2, versión web)
  * Purpose: Generar los Diagramas de Navegación Web por actor en Enterprise Architect
- *          con auto-posicionamiento por capas semánticas y ruteo ortogonal multicarril
- *          100% automático (cero cruces por encima de cajas y separación de pares).
+ *          con el acomodo de la guía para Cliente y los módulos de navegación
+ *          propios de Productor, Personal y Administrador.
  *          Un diagrama por actor (Cliente, Productor, Personal, Administrador). Cada uno
  *          muestra TODO lo que el rol puede usar de verdad (matriz rol_permiso + puede()
  *          del front), incluida la parte pública (inicio, catálogo, perfil, notificaciones).
@@ -55,8 +55,7 @@ var NOMBRE_RAIZ = "Diagramas de Navegación Web - FEDER";
 // "CUSTOM" = Custom Line con quiebres ortogonales estrictos
 var ESTILO_LINEA = "OR";
 
-// Modo apaisado en Doble Bloque (Izquierda: Público/Compra | Derecha: Panel/Pagos)
-// optimizado a proporción ~1.4:1 para entrar grande y legible en hoja Word Carta Horizontal
+// En horizontal se usa el acomodo propio de cada rol. En vertical se distribuye por capas.
 var MODO_HORIZONTAL_CARTA = true;
 
 // Parámetros del motor de layout compacto por capas y ruteo ortogonal por pasillos
@@ -132,274 +131,218 @@ function crearDiagramaCliente(rootPkg)
     var ctx = crearContextoDiagrama(pkg, diagram);
     var map = ctx.map;
 
-    // Nota: x, y y w son opcionales; el motor calcula automáticamente tamaños,
-    // columnas, bandas funcionales y rutas ortogonales sin cruzar cajas.
-    function pagina(name, stereotype, attrs, methods, x, y, w)
-    {
-        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, w);
-        var alto = altoCaja(stereotype, attrs, methods);
-        return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
-    }
+    var pagina = fabricaPaginas(ctx);
 
     // ---- Base: actor + inicio + búsqueda + preferencias ----
     crearActor(ctx, "Cliente", 90, 100);
 
     pagina("Inicio", "client page",
         "busqueda\nproductosDestacados\ncategorias\nmenu\ncontadorVisitas",
-        "buscar\nverCatalogo\nirPanel\ncerrarSesion",
-        200, 330, 260);
+        "buscar\nverCatalogo\nirPanel\ncerrarSesion", 260);
 
     pagina("BusquedaController", "Server Page",
         "q",
-        "buscar",
-        200, 80, 240);
+        "buscar", 240);
 
     pagina("frmPreferencias", "form page",
         "tema\nmodo\ntamano_fuente\ncontraste\nbotón Guardar",
-        "",
-        200, 700, 240);
+        "", 240);
 
     // ---- Login / Registro / Perfil ----
     pagina("Login", "client page",
         "email\npassword",
-        "",
-        560, 40, 220);
+        "", 220);
 
     pagina("frmLogin", "form page",
         "email\npassword\nbotón Iniciar Sesión",
-        "",
-        560, 160, 240);
+        "", 240);
 
     pagina("Registro", "client page",
         "nombre\napellido\nemail",
-        "",
-        560, 360, 220);
+        "", 220);
 
     pagina("frmRegistro", "form page",
         "nombre\napellido\nci\nemail\ntelefono\ndireccion\npassword\nconfirmarPassword\nbotón Registrarse",
-        "",
-        560, 490, 260);
+        "", 260);
 
     pagina("AuthController", "Server Page",
         "email\npassword\nnombre\napellido\nci\ntelefono\ndireccion\ntema\nmodo",
-        "login\nregistro\nme\nlogout\nactualizarPerfil\nguardarPreferencias",
-        900, 200, 280);
+        "login\nregistro\nme\nlogout\nactualizarPerfil\nguardarPreferencias", 280);
 
     pagina("Perfil", "client page",
         "nombre\napellido\nemail\ntelefono\ndireccion",
-        "",
-        900, 640, 250);
+        "", 250);
 
     pagina("frmPerfil", "form page",
         "nombre\napellido\nemail\ntelefono\ndireccion\npasswordActual\npassword\nconfirmarPassword\nbotón Guardar",
-        "",
-        900, 830, 260);
+        "", 260);
 
     // ---- Catálogo / Detalle / Carrito ----
     pagina("Catalogo", "client page",
         "q\ncategoria\nmodalidad\norden\nproductos",
-        "buscarProducto\nfiltrarCategoria\nordenar\nverProducto",
-        1300, 40, 260);
+        "buscarProducto\nfiltrarCategoria\nordenar\nverProducto", 260);
 
     pagina("CatalogoController", "Server Page",
         "q\ncategoria\nmodalidad\norden",
-        "index\nportada\nshow\ncategorias",
-        1650, 40, 260);
+        "index\nportada\nshow\ncategorias", 260);
 
     pagina("ProductoDetalle", "client page",
         "nombre\nimagen\nprecio_venta\npresentacion\ndisponible\nemprendimiento",
-        "agregarAlCarrito\nsolicitarEncargo",
-        1300, 330, 260);
+        "agregarAlCarrito\nsolicitarEncargo", 260);
 
     pagina("frmAgregarCarrito", "form page",
         "cantidad\nbotón Agregar al Carrito",
-        "",
-        1650, 300, 260);
+        "", 260);
 
     pagina("frmEncargo", "form page",
         "cantidad\nfecha_requerida\nobservacion\nbotón Solicitar Encargo",
-        "",
-        1650, 440, 260);
+        "", 260);
 
     pagina("Carrito", "client page",
         "items\ncantidad\nsubtotal\ntotal",
-        "cambiarCantidad\nquitarItem\nvaciar",
-        1300, 680, 260);
+        "cambiarCantidad\nquitarItem\nvaciar", 260);
 
     pagina("frmConfirmarPedido", "form page",
         "tipo_entrega\ndireccion\nreferencia\nfecha_preferida\nlatitud\nlongitud\nnit_ci\nrazon_social\nbotón Confirmar Pedido",
-        "",
-        1650, 640, 270);
+        "", 270);
 
     pagina("CarritoController", "Server Page",
         "producto_id\ncantidad\ntipo_entrega\ndireccion\nreferencia\nfecha_preferida\nlatitud\nlongitud\nnit_ci\nrazon_social",
-        "ver\nagregar\nactualizar\nquitar\nvaciar\nconfirmar",
-        2020, 330, 300);
+        "ver\nagregar\nactualizar\nquitar\nvaciar\nconfirmar", 300);
 
     // ---- Encargos ----
     pagina("EncargoController", "Server Page",
         "fecha_requerida\nobservacion\nitems\ntipo_entrega\ndireccion\nfecha_preferida",
-        "index\nshow\nstore\ncancelar\nconvertir",
-        2020, 760, 300);
+        "index\nshow\nstore\ncancelar\nconvertir", 300);
 
     pagina("Encargos", "client page",
         "encargos\nestado",
-        "listarEncargo\ncancelarEncargo\nconvertirEnPedido",
-        2400, 640, 280);
+        "listarEncargo\ncancelarEncargo\nconvertirEnPedido", 280);
 
     pagina("frmCancelarEncargo", "form page",
         "botón Cancelar Encargo",
-        "",
-        2760, 600, 260);
+        "", 260);
 
     pagina("frmConvertirEncargo", "form page",
         "tipo_entrega\ndireccion\nreferencia\nfecha_preferida\nlatitud\nlongitud\nbotón Convertir en Pedido",
-        "",
-        2760, 740, 280);
+        "", 280);
 
     // ---- Panel del cliente ----
     pagina("PanelCliente", "client page",
         "usuario\nmenu\nMis pedidos\nEncargos\nEntregas\nPagos\nPlanes de pago\nMétodos de pago\nNotificaciones\nMi perfil\nultimosPedidos",
-        "cerrarSesion",
-        560, 1050, 280);
+        "cerrarSesion", 280);
 
     pagina("DashboardController", "Server Page",
         "",
-        "resumenUsuario",
-        200, 1100, 250);
+        "resumenUsuario", 250);
 
     pagina("Notificaciones", "client page",
         "notificaciones\nleida",
-        "leer\nleerTodas\nverPedido",
-        560, 1450, 260);
+        "leer\nleerTodas\nverPedido", 260);
 
     pagina("NotificacionController", "Server Page",
         "",
-        "index\nnoLeidas\nleer\nleerTodas",
-        200, 1450, 260);
+        "index\nnoLeidas\nleer\nleerTodas", 260);
 
     // ---- Pedidos ----
     pagina("MisPedidos", "client page",
         "pedidos\nestado\nq\ndesde\nhasta",
-        "buscarPedido\nlistarPedido\nverPedido",
-        1300, 1000, 260);
+        "buscarPedido\nlistarPedido\nverPedido", 260);
 
     pagina("PedidoController", "Server Page",
         "estado\nq\ndesde\nhasta",
-        "index\nshow\ncancelar",
-        1650, 1000, 260);
+        "index\nshow\ncancelar", 260);
 
     pagina("PedidoDetalle", "client page",
         "numero\nestado\ndetalle\nentrega\npagos\nplan\ncuotas\nsaldo",
-        "imprimir\npagar\ncrearPlan\npagarCuota\ncancelarPedido",
-        1300, 1260, 280);
+        "imprimir\npagar\ncrearPlan\npagarCuota\ncancelarPedido", 280);
 
     pagina("frmCancelarPedido", "form page",
         "botón Cancelar Pedido",
-        "",
-        1650, 1210, 250);
+        "", 250);
 
     pagina("frmPlanPago", "form page",
         "nro_cuotas\nfrecuencia\ncuota_inicial\nbotón Crear Plan",
-        "",
-        1650, 1330, 260);
+        "", 260);
 
     pagina("PlanPagoController", "Server Page",
         "nro_cuotas\nfrecuencia\ncuota_inicial\nmetodo_pago_id\nmetodo_pago_usuario_id",
-        "index\nstore\npagarCuota",
-        2020, 1280, 300);
+        "index\nstore\npagarCuota", 300);
 
     // ---- Pago (QR / Transferencia / Efectivo / Tarjeta con Stripe) ----
     // ModalPago es un solo componente de React, pero envía a dos endpoints distintos:
     // se modela como dos formularios lógicos (pedido -> PagoController, cuota -> PlanPagoController).
     pagina("frmPagoPedido", "form page",
         "metodo_pago_id\nmonto\ntarjeta_guardada\nreferencia\nbotón Pagar",
-        "",
-        1650, 1530, 280);
+        "", 280);
 
     pagina("frmPagoCuota", "form page",
         "metodo_pago_id\ntarjeta_guardada\nreferencia\nbotón Pagar Cuota",
-        "",
-        1650, 1530, 280);
+        "", 280);
 
     pagina("frmPagoCuotaPlan", "form page",
         "metodo_pago_id\ntarjeta_guardada\nreferencia\nbotón Pagar Cuota",
-        "",
-        1650, 1530, 280);
+        "", 280);
 
     pagina("PagoController", "Server Page",
         "metodo_pago_id\nmonto\nmetodo_pago_usuario_id\nreferencia\npayment_intent_id",
-        "index\nmetodos\npagar\nconfirmar",
-        2020, 1570, 300);
+        "index\nmetodos\npagar\nconfirmar", 300);
 
     // Servidor de Stripe (recurso externo del lado del servidor)
     pagina("StripeAPI", "Server Page",
         "customer\npayment_method_id\nclient_secret\namount\ncurrency",
-        "createSetupIntent\ncreatePaymentIntent\nretrievePaymentMethod\nretrievePaymentIntent",
-        2400, 1280, 300);
+        "createSetupIntent\ncreatePaymentIntent\nretrievePaymentMethod\nretrievePaymentIntent", 300);
 
     // Stripe.js (corre en el navegador; la tarjeta va directo a Stripe, nunca a FEDER)
     pagina("StripeJS", "JavaScript",
         "cardElement\nclientSecret",
-        "confirmCardSetup\nhandleNextAction",
-        2400, 1280, 260);
+        "confirmCardSetup\nhandleNextAction", 260);
 
     pagina("Stripe3DS", "client page",
         "banco_emisor\ncodigo_verificacion",
-        "autenticar",
-        2780, 1300, 260);
+        "autenticar", 260);
 
     pagina("PagoQR", "client page",
         "imagen_qr\nmonto\nestado",
-        "",
-        2400, 1640, 260);
+        "", 260);
 
     pagina("QrController", "Server Page",
         "",
-        "imagen",
-        2780, 1640, 240);
+        "imagen", 240);
 
     pagina("PlanesPago", "client page",
         "planes\ncuotas\nestado",
-        "listarPlan\npagarCuota",
-        1300, 1620, 260);
+        "listarPlan\npagarCuota", 260);
 
     pagina("MisPagos", "client page",
         "pagos\nmetodo\nmonto\ncodigo_transaccion\nestado",
-        "listarPago\nfiltrar\nverPedido",
-        2400, 1880, 280);
+        "listarPago\nfiltrar\nverPedido", 280);
 
     // ---- Entregas ----
     pagina("MisEntregas", "client page",
         "entregas\ntipo\ndireccion\nfecha_programada\nestado",
-        "listarEntrega\nverMapa",
-        1300, 1900, 280);
+        "listarEntrega\nverMapa", 280);
 
     pagina("EntregaController", "Server Page",
         "estado\ntipo",
-        "index",
-        1650, 1920, 250);
+        "index", 250);
 
     // ---- Mis métodos de pago (tarjetas guardadas en Stripe) ----
     pagina("MisMetodosPago", "client page",
         "tarjetas\ncuentas\npredeterminado",
-        "listar\nmarcarPredeterminado\neliminar",
-        1300, 2180, 280);
+        "listar\nmarcarPredeterminado\neliminar", 280);
 
     pagina("frmTarjetaStripe", "form page",
         "alias\ntitular\ncardElement\npredeterminado\nbotón Guardar Tarjeta",
-        "",
-        1650, 2140, 270);
+        "", 270);
 
     pagina("frmCuentaTransferencia", "form page",
         "alias\ntitular\nbanco\nnumero_cuenta\nbotón Guardar",
-        "",
-        1650, 2310, 270);
+        "", 270);
 
     pagina("MetodoPagoUsuarioController", "Server Page",
         "alias\ntitular\npayment_method_id\npredeterminado\nbanco\nnumero_cuenta",
-        "index\nsetupIntent\nstore\nupdate\ndestroy",
-        2020, 2180, 300);
+        "index\nsetupIntent\nstore\nupdate\ndestroy", 300);
 
     // ---- Relaciones Cliente ----
     asociacionActor(map, "Cliente", "Inicio");
@@ -553,7 +496,187 @@ function crearDiagramaCliente(rootPkg)
     submit(map, "frmCuentaTransferencia", "MetodoPagoUsuarioController");
     response(map, "MetodoPagoUsuarioController", "frmCuentaTransferencia");
 
-    finalizarDiagrama(ctx);
+    finalizarDiagrama(ctx, MODO_HORIZONTAL_CARTA ? planoCliente() : null);
+}
+
+// Plano manual de «Diagrama de Navegación - Cliente», de DiagramasNavegacion GUIA.eapx.
+// Se trasladaron cajas y quiebres juntos para dejar un margen a la izquierda.
+// Las claves son nombres del modelo, independientes de los IDs que asigne EA al regenerar.
+function planoCliente()
+{
+    // [izquierda, distancia desde arriba, ancho, alto], en unidades de diagrama.
+    var cajas = {
+        Cliente: [40, 848, 50, 100],
+        Inicio: [186, 793, 159, 161],
+        BusquedaController: [56, 693, 108, 75],
+        frmPreferencias: [402, 769, 146, 141],
+        Login: [197, 683, 95, 72],
+        frmLogin: [179, 492, 129, 117],
+        Registro: [218, 361, 110, 89],
+        frmRegistro: [469, 267, 145, 204],
+        AuthController: [345, 479, 152, 237],
+        Perfil: [648, 368, 111, 103],
+        frmPerfil: [566, 507, 151, 197],
+        Catalogo: [197, 987, 138, 166],
+        CatalogoController: [388, 985, 138, 148],
+        ProductoDetalle: [194, 1182, 143, 148],
+        frmAgregarCarrito: [402, 1204, 130, 104],
+        frmEncargo: [556, 1021, 130, 132],
+        Carrito: [199, 1379, 132, 144],
+        frmConfirmarPedido: [395, 1380, 161, 194],
+        CarritoController: [601, 1190, 180, 255],
+        EncargoController: [741, 996, 150, 183],
+        Encargos: [811, 1364, 167, 120],
+        frmCancelarEncargo: [811, 1233, 145, 84],
+        frmConvertirEncargo: [972, 1179, 140, 167],
+        PanelCliente: [602, 735, 139, 209],
+        DashboardController: [798, 620, 126, 64],
+        Notificaciones: [1202, 910, 153, 105],
+        NotificacionController: [1195, 1064, 152, 89],
+        MisPedidos: [1061, 626, 120, 150],
+        PedidoController: [1400, 364, 129, 137],
+        PedidoDetalle: [971, 406, 143, 214],
+        frmCancelarPedido: [1209, 359, 140, 82],
+        frmPlanPago: [1961, 540, 111, 131],
+        PlanPagoController: [1855, 697, 167, 146],
+        frmPagoPedido: [996, 216, 140, 152],
+        frmPagoCuota: [1660, 535, 121, 139],
+        frmPagoCuotaPlan: [1651, 892, 140, 140],
+        PagoController: [784, 246, 139, 162],
+        StripeAPI: [822, 61, 148, 160],
+        StripeJS: [1156, 216, 143, 109],
+        Stripe3DS: [1030, 86, 118, 83],
+        PagoQR: [638, 268, 93, 86],
+        QrController: [469, 188, 121, 59],
+        PlanesPago: [1646, 722, 149, 121],
+        MisPagos: [801, 440, 122, 167],
+        MisEntregas: [785, 799, 112, 145],
+        EntregaController: [951, 849, 178, 81],
+        MisMetodosPago: [1423, 849, 193, 119],
+        frmTarjetaStripe: [1349, 188, 144, 150],
+        frmCuentaTransferencia: [1930, 885, 135, 154],
+        MetodoPagoUsuarioController: [1428, 598, 183, 187]
+    };
+    var rutas = {};
+
+    // Los anclajes son relativos al centro de cada caja. Path usa puntos absolutos
+    // con Y negativa. LMB sitúa la etiqueta del estereotipo respecto de su línea.
+    function ruta(origen, destino, anclajes, path, etiqueta)
+    {
+        var lmb = etiqueta ? etiqueta + ":HDN=0:BLD=0:ITA=0:UND=0:CLR=-1:ALN=0:DIR=0:ROT=0" : "";
+        rutas[origen + ">" + destino] = {
+            geometry: anclajes + "$LLB=;LLT=;LMT=;LMB=" + lmb + ";LRT=;LRB=;IRHS=;ILHS=;",
+            path: path
+        };
+    }
+
+    ruta("Cliente", "Inicio", "EDGE=2;SX=0;SY=10;EX=0;EY=10;", "");
+    ruta("Inicio", "Login", "EDGE=1;SX=-15;SY=-14;EX=16;EY=-14;", "", "CX=25:CY=14:OX=19:OY=-5");
+    ruta("Inicio", "Registro", "EDGE=1;SX=-55;SY=0;EX=-5;EY=0;", "210:-768;171:-768;171:-477;268:-477;", "CX=25:CY=14:OX=1:OY=-18");
+    ruta("Inicio", "Catalogo", "EDGE=3;SX=-2;SY=3;EX=-28;EY=2;", "", "CX=25:CY=14:OX=-23:OY=-13");
+    ruta("Inicio", "Carrito", "EDGE=4;SX=0;SY=-41;EX=0;EY=18;", "107:-914;107:-1433;", "CX=25:CY=14:OX=0:OY=0");
+    ruta("Inicio", "PanelCliente", "EDGE=2;SX=0;SY=-63;EX=0;EY=23;", "574:-936;574:-816;", "CX=25:CY=14:OX=16:OY=-5");
+    ruta("Inicio", "BusquedaController", "EDGE=4;SX=0;SY=63;EX=-9;EY=0;", "101:-810;", "CX=25:CY=14:OX=32:OY=-3");
+    ruta("BusquedaController", "Inicio", "EDGE=3;SX=-34;SY=0;EX=0;EY=31;", "76:-842;", "CX=30:CY=14:OX=-17:OY=-22");
+    ruta("Inicio", "frmPreferencias", "EDGE=2;SX=-13;SY=2;EX=-25;EY=1;", "");
+    ruta("frmPreferencias", "AuthController", "EDGE=1;SX=-37;SY=41;EX=-11;EY=4;", "", "CX=38:CY=14:OX=-36:OY=-6");
+    ruta("Login", "frmLogin", "EDGE=1;SX=-3;SY=-3;EX=-12;EY=-26;", "");
+    ruta("frmLogin", "AuthController", "EDGE=3;SX=35;SY=0;EX=0;EY=-49;", "278:-646;", "CX=38:CY=14:OX=2:OY=-26");
+    ruta("AuthController", "PanelCliente", "EDGE=3;SX=71;SY=0;EX=0;EY=92;", "492:-747;", "CX=41:CY=14:OX=-2:OY=-22");
+    ruta("AuthController", "frmLogin", "EDGE=4;SX=0;SY=-63;EX=16;EY=0;", "259:-660;", "CX=47:CY=14:OX=23:OY=28");
+    ruta("Registro", "frmRegistro", "EDGE=1;SX=-3;SY=0;EX=0;EY=31;", "270:-338;");
+    ruta("frmRegistro", "AuthController", "EDGE=4;SX=0;SY=-13;EX=-59;EY=0;", "362:-382;", "CX=38:CY=14:OX=24:OY=-4");
+    ruta("AuthController", "Catalogo", "EDGE=3;SX=47;SY=0;EX=41;EY=0;", "468:-758;558:-758;558:-968;307:-968;", "CX=41:CY=14:OX=29:OY=-19");
+    ruta("AuthController", "frmRegistro", "EDGE=1;SX=-22;SY=0;EX=0;EY=-46;", "399:-415;", "CX=47:CY=14:OX=-11:OY=-24");
+    ruta("Catalogo", "CatalogoController", "EDGE=2;SX=-11;SY=3;EX=-11;EY=-41;", "", "CX=25:CY=14:OX=-1:OY=6");
+    ruta("CatalogoController", "Catalogo", "EDGE=4;SX=0;SY=1;EX=0;EY=29;", "", "CX=30:CY=14:OX=0:OY=9");
+    ruta("Catalogo", "ProductoDetalle", "EDGE=4;SX=0;SY=-46;EX=0;EY=47;", "159:-1116;159:-1209;", "CX=25:CY=14:OX=0:OY=0");
+    ruta("CatalogoController", "ProductoDetalle", "EDGE=4;SX=0;SY=-71;EX=0;EY=59;", "362:-1130;362:-1197;", "CX=30:CY=14:OX=-20:OY=-2");
+    ruta("ProductoDetalle", "frmAgregarCarrito", "EDGE=2;SX=-12;SY=13;EX=-13;EY=-14;", "");
+    ruta("frmAgregarCarrito", "CarritoController", "EDGE=2;SX=0;SY=18;EX=0;EY=79;", "", "CX=38:CY=14:OX=-2:OY=-23");
+    ruta("CarritoController", "frmAgregarCarrito", "EDGE=4;SX=0;SY=45;EX=0;EY=-15;", "", "CX=47:CY=14:OX=5:OY=9");
+    ruta("ProductoDetalle", "frmEncargo", "EDGE=2;SX=0;SY=26;EX=2;EY=0;", "390:-1230;390:-1174;623:-1174;");
+    ruta("frmEncargo", "EncargoController", "EDGE=1;SX=23;SY=0;EX=0;EY=79;", "644:-1008;", "CX=38:CY=14:OX=10:OY=1");
+    ruta("EncargoController", "frmEncargo", "EDGE=4;SX=1;SY=19;EX=1;EY=2;", "", "CX=47:CY=14:OX=0:OY=-28");
+    ruta("Carrito", "CarritoController", "EDGE=1;SX=36;SY=0;EX=0;EY=-41;", "301:-1358;", "CX=25:CY=14:OX=0:OY=0");
+    ruta("CarritoController", "Carrito", "EDGE=4;SX=0;SY=-21;EX=2;EY=0;", "267:-1338;", "CX=30:CY=14:OX=0:OY=0");
+    ruta("Carrito", "frmConfirmarPedido", "EDGE=2;SX=-3;SY=-18;EX=-3;EY=47;", "");
+    ruta("frmConfirmarPedido", "CarritoController", "EDGE=2;SX=0;SY=7;EX=-74;EY=0;", "617:-1470;", "CX=38:CY=14:OX=-34:OY=-8");
+    ruta("CarritoController", "PedidoDetalle", "EDGE=3;SX=34;SY=0;EX=0;EY=-27;", "725:-1497;1381:-1497;1381:-540;", "CX=41:CY=14:OX=16:OY=7");
+    ruta("CarritoController", "frmConfirmarPedido", "EDGE=3;SX=-40;SY=0;EX=0;EY=-12;", "651:-1489;", "CX=47:CY=14:OX=0:OY=0");
+    ruta("PanelCliente", "DashboardController", "EDGE=2;SX=0;SY=94;EX=27;EY=0;", "888:-745;", "CX=25:CY=14:OX=0:OY=0");
+    ruta("DashboardController", "PanelCliente", "EDGE=3;SX=6;SY=0;EX=19;EY=0;", "867:-718;690:-718;", "CX=30:CY=14:OX=19:OY=0");
+    ruta("PanelCliente", "MisPedidos", "EDGE=2;SX=0;SY=59;EX=0;EY=-21;", "1004:-780;1004:-722;", "CX=25:CY=14:OX=24:OY=-6");
+    ruta("PanelCliente", "Encargos", "EDGE=3;SX=-55;SY=0;EX=0;EY=-18;", "616:-990;1170:-990;1170:-1442;", "CX=25:CY=14:OX=6:OY=-8");
+    ruta("PanelCliente", "MisEntregas", "EDGE=2;SX=0;SY=15;EX=0;EY=0;", "", "CX=25:CY=14:OX=0:OY=0");
+    ruta("PanelCliente", "MisPagos", "EDGE=2;SX=0;SY=80;EX=0;EY=-51;", "946:-759;946:-574;", "CX=25:CY=14:OX=-16:OY=19");
+    ruta("PanelCliente", "PlanesPago", "EDGE=2;SX=-11;SY=41;EX=-11;EY=-17;", "", "CX=25:CY=14:OX=0:OY=0");
+    ruta("PanelCliente", "MisMetodosPago", "EDGE=2;SX=0;SY=48;EX=0;EY=32;", "1298:-791;1298:-876;", "CX=25:CY=14:OX=0:OY=0");
+    ruta("PanelCliente", "Notificaciones", "EDGE=3;SX=-24;SY=0;EX=0;EY=-11;", "647:-973;", "CX=25:CY=14:OX=147:OY=-18");
+    ruta("PanelCliente", "Perfil", "EDGE=1;SX=-16;SY=0;EX=0;EY=-16;", "655:-709;792:-709;792:-435;", "CX=25:CY=14:OX=-29:OY=4");
+    ruta("Perfil", "frmPerfil", "EDGE=3;SX=32;SY=0;EX=0;EY=41;", "735:-564;");
+    ruta("frmPerfil", "AuthController", "EDGE=4;SX=0;SY=41;EX=0;EY=45;", "", "CX=38:CY=14:OX=2:OY=5");
+    ruta("AuthController", "Perfil", "EDGE=2;SX=0;SY=102;EX=0;EY=5;", "628:-495;628:-414;", "CX=30:CY=14:OX=-48:OY=22");
+    ruta("AuthController", "frmPerfil", "EDGE=2;SX=-2;SY=-23;EX=-3;EY=4;", "", "CX=47:CY=14:OX=-1:OY=6");
+    ruta("Notificaciones", "NotificacionController", "EDGE=3;SX=25;SY=0;EX=26;EY=-4;", "", "CX=25:CY=14:OX=27:OY=-11");
+    ruta("NotificacionController", "Notificaciones", "EDGE=1;SX=-39;SY=-1;EX=23;EY=-2;", "", "CX=30:CY=14:OX=-22:OY=-8");
+    ruta("Notificaciones", "PedidoDetalle", "EDGE=1;SX=-5;SY=0;EX=-11;EY=0;", "1273:-810;1031:-810;", "CX=25:CY=14:OX=117:OY=13");
+    ruta("MisPedidos", "PedidoController", "EDGE=2;SX=0;SY=59;EX=0;EY=-42;", "1206:-642;1206:-605;1238:-605;1238:-474;", "CX=25:CY=14:OX=-44:OY=-11");
+    ruta("PedidoController", "MisPedidos", "EDGE=4;SX=0;SY=-61;EX=0;EY=39;", "1299:-493;1299:-662;", "CX=30:CY=14:OX=0:OY=0");
+    ruta("MisPedidos", "PedidoDetalle", "EDGE=4;SX=0;SY=41;EX=-46;EY=0;", "996:-660;", "CX=25:CY=14:OX=17:OY=19");
+    ruta("PedidoController", "PedidoDetalle", "EDGE=4;SX=-23;SY=-21;EX=-23;EY=36;", "", "CX=30:CY=14:OX=-3:OY=1");
+    ruta("PedidoDetalle", "frmCancelarPedido", "EDGE=2;SX=0;SY=83;EX=0;EY=19;", "1164:-430;1164:-381;");
+    ruta("frmCancelarPedido", "PedidoController", "EDGE=2;SX=27;SY=0;EX=0;EY=38;", "", "CX=38:CY=14:OX=0:OY=11");
+    ruta("PedidoDetalle", "frmPlanPago", "EDGE=2;SX=0;SY=-6;EX=18;EY=0;", "2034:-519;");
+    ruta("frmPlanPago", "PlanPagoController", "EDGE=4;SX=0;SY=0;EX=-19;EY=0;", "1919:-605;", "CX=38:CY=14:OX=0:OY=0");
+    ruta("PlanPagoController", "frmPlanPago", "EDGE=2;SX=0;SY=28;EX=20;EY=0;", "2036:-742;", "CX=47:CY=14:OX=14:OY=-9");
+    ruta("PlanesPago", "PlanPagoController", "EDGE=2;SX=0;SY=-22;EX=-19;EY=0;", "", "CX=25:CY=14:OX=0:OY=0");
+    ruta("PlanPagoController", "PlanesPago", "EDGE=4;SX=-6;SY=57;EX=18;EY=2;", "", "CX=30:CY=14:OX=-2:OY=-25");
+    ruta("PedidoDetalle", "frmPagoPedido", "EDGE=1;SX=-13;SY=-12;EX=-54;EY=13;", "");
+    ruta("frmPagoPedido", "PagoController", "EDGE=4;SX=-32;SY=37;EX=0;EY=-7;", "", "CX=38:CY=14:OX=-5:OY=-25");
+    ruta("PagoController", "frmPagoPedido", "EDGE=2;SX=1;SY=-60;EX=1;EY=49;", "", "CX=47:CY=14:OX=-3:OY=-26");
+    ruta("PedidoDetalle", "frmPagoCuota", "EDGE=2;SX=3;SY=-66;EX=3;EY=35;", "");
+    ruta("frmPagoCuota", "PlanPagoController", "EDGE=2;SX=0;SY=13;EX=-44;EY=0;", "1894:-591;", "CX=38:CY=14:OX=-36:OY=-38");
+    ruta("PlanPagoController", "frmPagoCuota", "EDGE=1;SX=-70;SY=0;EX=0;EY=-23;", "1868:-627;", "CX=47:CY=14:OX=1:OY=9");
+    ruta("PlanesPago", "frmPagoCuotaPlan", "EDGE=3;SX=-30;SY=0;EX=-30;EY=69;", "");
+    ruta("frmPagoCuotaPlan", "PlanPagoController", "EDGE=2;SX=0;SY=52;EX=-48;EY=0;", "1890:-910;", "CX=38:CY=14:OX=0:OY=0");
+    ruta("PlanPagoController", "frmPagoCuotaPlan", "EDGE=4;SX=0;SY=-60;EX=21;EY=0;", "1828:-830;1828:-861;1742:-861;", "CX=47:CY=14:OX=-2:OY=-16");
+    ruta("PedidoDetalle", "PagoController", "EDGE=4;SX=0;SY=79;EX=42;EY=0;", "895:-434;", "CX=25:CY=14:OX=37:OY=-7");
+    ruta("PedidoDetalle", "MetodoPagoUsuarioController", "EDGE=2;SX=-44;SY=-97;EX=-44;EY=81;", "", "CX=25:CY=14:OX=-13:OY=0");
+    ruta("PlanesPago", "MetodoPagoUsuarioController", "EDGE=4;SX=0;SY=33;EX=0;EY=-45;", "", "CX=25:CY=14:OX=0:OY=0");
+    ruta("PagoController", "StripeAPI", "EDGE=1;SX=-23;SY=0;EX=0;EY=-32;", "");
+    ruta("PlanPagoController", "StripeAPI", "EDGE=2;SX=0;SY=6;EX=15;EY=0;", "2091:-764;2091:-39;911:-39;");
+    ruta("PedidoDetalle", "StripeJS", "EDGE=1;SX=10;SY=0;EX=-41;EY=0;", "1052:-374;1186:-374;");
+    ruta("StripeAPI", "Stripe3DS", "EDGE=2;SX=0;SY=-12;EX=0;EY=0;", "", "CX=30:CY=14:OX=0:OY=0");
+    ruta("Stripe3DS", "PagoController", "EDGE=4;SX=0;SY=-31;EX=0;EY=68;", "984:-158;984:-259;", "CX=41:CY=14:OX=33:OY=-27");
+    ruta("PagoController", "PagoQR", "EDGE=4;SX=20;SY=0;EX=0;EY=2;", "", "CX=41:CY=14:OX=0:OY=-25");
+    ruta("QrController", "PagoQR", "EDGE=2;SX=0;SY=-12;EX=-9;EY=0;", "675:-229;", "CX=30:CY=14:OX=25:OY=-10");
+    ruta("MisPagos", "PagoController", "EDGE=1;SX=24;SY=3;EX=-32;EY=-29;", "", "CX=25:CY=14:OX=27:OY=-10");
+    ruta("PagoController", "MisPagos", "EDGE=3;SX=-36;SY=-60;EX=-36;EY=81;", "", "CX=30:CY=14:OX=-24:OY=-12");
+    ruta("MisPagos", "PedidoDetalle", "EDGE=2;SX=-4;SY=26;EX=-4;EY=44;", "", "CX=25:CY=14:OX=-1:OY=-25");
+    ruta("MisEntregas", "EntregaController", "EDGE=3;SX=-2;SY=0;EX=-52;EY=0;", "839:-965;988:-965;", "CX=25:CY=14:OX=25:OY=-19");
+    ruta("EntregaController", "MisEntregas", "EDGE=4;SX=-6;SY=16;EX=-6;EY=-23;", "", "CX=30:CY=14:OX=3:OY=-28");
+    ruta("Encargos", "EncargoController", "EDGE=2;SX=0;SY=28;EX=0;EY=-35;", "1126:-1396;1126:-1122;", "CX=25:CY=14:OX=3:OY=14");
+    ruta("EncargoController", "Encargos", "EDGE=2;SX=0;SY=-9;EX=0;EY=5;", "1151:-1096;1151:-1419;", "CX=30:CY=14:OX=0:OY=0");
+    ruta("Encargos", "frmCancelarEncargo", "EDGE=1;SX=0;SY=-35;EX=-55;EY=0;", "");
+    ruta("frmCancelarEncargo", "EncargoController", "EDGE=1;SX=-41;SY=-1;EX=-5;EY=-1;", "", "CX=38:CY=14:OX=-31:OY=-7");
+    ruta("Encargos", "frmConvertirEncargo", "EDGE=1;SX=12;SY=0;EX=0;EY=-74;", "906:-1336;");
+    ruta("frmConvertirEncargo", "EncargoController", "EDGE=4;SX=0;SY=43;EX=0;EY=-75;", "916:-1219;916:-1162;", "CX=38:CY=14:OX=31:OY=2");
+    ruta("EncargoController", "PedidoDetalle", "EDGE=2;SX=0;SY=34;EX=-60;EY=0;", "1148:-1053;1148:-841;982:-841;", "CX=41:CY=14:OX=-20:OY=-25");
+    ruta("EncargoController", "frmConvertirEncargo", "EDGE=2;SX=0;SY=-55;EX=4;EY=0;", "1046:-1142;", "CX=47:CY=14:OX=-38:OY=-17");
+    ruta("MisMetodosPago", "MetodoPagoUsuarioController", "EDGE=1;SX=9;SY=-9;EX=44;EY=13;", "", "CX=25:CY=14:OX=0:OY=0");
+    ruta("MetodoPagoUsuarioController", "MisMetodosPago", "EDGE=3;SX=50;SY=35;EX=45;EY=-5;", "", "CX=30:CY=14:OX=0:OY=0");
+    ruta("MisMetodosPago", "frmTarjetaStripe", "EDGE=1;SX=-73;SY=0;EX=-59;EY=0;", "1446:-816;1362:-816;");
+    ruta("frmTarjetaStripe", "MetodoPagoUsuarioController", "EDGE=2;SX=0;SY=-23;EX=-54;EY=0;", "1538:-286;1538:-564;1465:-564;", "CX=38:CY=14:OX=0:OY=0");
+    ruta("MetodoPagoUsuarioController", "frmTarjetaStripe", "EDGE=1;SX=42;SY=0;EX=0;EY=7;", "1561:-256;", "CX=47:CY=14:OX=18:OY=-23");
+    ruta("frmTarjetaStripe", "StripeJS", "EDGE=4;SX=4;SY=16;EX=4;EY=-10;", "");
+    ruta("StripeJS", "StripeAPI", "EDGE=1;SX=47;SY=0;EX=0;EY=63;", "1274:-78;");
+    ruta("MetodoPagoUsuarioController", "StripeAPI", "EDGE=1;SX=57;SY=0;EX=0;EY=73;", "1576:-137;1381:-137;1381:-68;");
+    ruta("MisMetodosPago", "frmCuentaTransferencia", "EDGE=3;SX=10;SY=0;EX=0;EY=3;", "1529:-1047;1832:-1047;1832:-959;");
+    ruta("frmCuentaTransferencia", "MetodoPagoUsuarioController", "EDGE=1;SX=27;SY=0;EX=0;EY=-4;", "2024:-859;2081:-859;2081:-490;1638:-490;1638:-695;", "CX=38:CY=14:OX=25:OY=-12");
+    ruta("MetodoPagoUsuarioController", "frmCuentaTransferencia", "EDGE=1;SX=71;SY=0;EX=0;EY=56;", "1590:-458;2101:-458;2101:-906;", "CX=47:CY=14:OX=28:OY=16");
+
+    return { cajas: cajas, rutas: rutas };
 }
 
 /* ============================================================
@@ -567,9 +690,9 @@ function crearDiagramaCliente(rootPkg)
 // Devuelve la función pagina(name, stereotype, attrs, methods) ligada al diagrama.
 function fabricaPaginas(ctx)
 {
-    return function (name, stereotype, attrs, methods)
+    return function (name, stereotype, attrs, methods, anchoMinimo)
     {
-        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, null);
+        var ancho = estimarAnchoCaja(name, stereotype, attrs, methods, anchoMinimo);
         var alto = altoCaja(stereotype, attrs, methods);
         return crearPagina(ctx, name, stereotype, attrs, methods, ancho, alto);
     };
@@ -716,10 +839,6 @@ function relacionarParteComun(map, opts)
 
 function crearDiagramaProductor(rootPkg)
 {
-    // Con ~30 cajas un solo bloque vertical entra más grande en la hoja carta.
-    var modoAnterior = MODO_HORIZONTAL_CARTA;
-    MODO_HORIZONTAL_CARTA = false;
-
     var pkg = crearPaquete(rootPkg, "Navegación - Productor");
     var diagram = crearDiagrama(pkg, "Diagrama de Navegación - Productor");
     var ctx = crearContextoDiagrama(pkg, diagram);
@@ -848,8 +967,7 @@ function crearDiagramaProductor(rootPkg)
     build(map, "LoteController", "Trazabilidad");
     response(map, "LoteController", "frmTrazabilidad");
 
-    finalizarDiagrama(ctx);
-    MODO_HORIZONTAL_CARTA = modoAnterior;
+    finalizarDiagrama(ctx, null, ubicarProductor);
 }
 
 /*
@@ -1364,7 +1482,7 @@ function crearDiagramaPersonal(rootPkg)
     agregarModulosStaff(ctx, pagina, "PanelPersonal", false);
     relacionarParteComun(ctx.map, comun);
 
-    finalizarDiagrama(ctx);
+    finalizarDiagrama(ctx, null, ubicarPersonalAdministrativo);
 }
 
 /* ============================================================
@@ -1443,7 +1561,7 @@ function crearDiagramaAdministrador(rootPkg)
     link(map, "MisMetodosPago", "MetodoPagoUsuarioController");
     build(map, "MetodoPagoUsuarioController", "MisMetodosPago");
 
-    finalizarDiagrama(ctx);
+    finalizarDiagrama(ctx, null, ubicarPersonalAdministrativo);
 }
 
 /* ============================================================
@@ -3797,12 +3915,453 @@ function obtenerEstiloLineaEA()
     return "Mode=3;TREE=OR;";
 }
 
-function finalizarDiagrama(ctx)
+// Productor: acceso y catálogo a la izquierda, panel en el centro y módulos del rol a la derecha.
+// Cada columna indica el centro vertical de las cajas. Las alturas reales de EA pueden ampliarla.
+function ubicarProductor(grafo)
+{
+    var columnas = [
+        [["frmLogin", 200], ["Login", 450], ["Productor", 705], ["BusquedaController", 985], ["CatalogoController", 1260]],
+        [["AuthController", 195], ["frmPreferencias", 455], ["Inicio", 705], ["Catalogo", 985], ["ProductoDetalle", 1260]],
+        [["frmPerfil", 195], ["Perfil", 455], ["PanelProductor", 705], ["DashboardController", 985],
+         ["Notificaciones", 1190], ["NotificacionController", 1390]],
+        [["ComunidadController", 185], ["Comunidades", 425], ["Produccion", 705], ["Lotes", 1005], ["Trazabilidad", 1260]],
+        [["frmEmprendimiento", 195], ["MisEmprendimientos", 455], ["frmProduccion", 765],
+         ["LoteController", 1050], ["frmTrazabilidad", 1260]],
+        [["EmprendimientoController", 230], ["EmprendimientoDetalle", 565], ["ProduccionController", 865]],
+        [["frmImagenEmprendimiento", 160], ["frmOferta", 445], ["ProductoController", 700]]
+    ];
+    var colX = [];
+    var colMaxW = [];
+    var total = 0;
+    var c, j, n;
+    for (c = 0; c < columnas.length; c++)
+    {
+        colMaxW[c] = 0;
+        for (j = 0; j < columnas[c].length; j++)
+        {
+            n = grafo.nodeMap[columnas[c][j][0]];
+            if (!n) return null;
+            colMaxW[c] = Math.max(colMaxW[c], n.w);
+            total++;
+        }
+    }
+    if (total != grafo.nodes.length) return null;
+
+    var x = LAYOUT_CFG.marginX;
+    for (c = 0; c < columnas.length; c++)
+    {
+        colX[c] = x;
+        var yMin = LAYOUT_CFG.marginY;
+        for (j = 0; j < columnas[c].length; j++)
+        {
+            var puesto = columnas[c][j];
+            n = grafo.nodeMap[puesto[0]];
+            n.col = c;
+            n.x = x + Math.round((colMaxW[c] - n.w) / 2);
+            n.y = Math.max(yMin, Math.round(puesto[1] - n.h / 2));
+            yMin = n.y + n.h + 50;
+        }
+        x += colMaxW[c] + 92;
+    }
+    return { numCols: columnas.length, colX: colX, colMaxW: colMaxW };
+}
+
+// Cada zona reúne módulos que comparten datos. Cada fila contiene las dos columnas
+// de un módulo; los nombres de una misma columna se apilan de arriba hacia abajo.
+function ubicarPersonalAdministrativo(grafo)
+{
+    var admin = grafo.nodeMap.PanelAdministrador != null;
+    var actor = admin ? "Administrador" : "Personal";
+    var panel = admin ? "PanelAdministrador" : "PanelPersonal";
+    var zonas = [
+        [ // Catálogo e inventario: los lotes y sus movimientos quedan junto a producción.
+            ["CategoriaController frmCategoria", "Categorias"],
+            ["ProductoController frmProducto", "Productos"],
+            ["AlertaController frmAtenderAlerta", "Alertas"],
+            ["InventarioController", "Inventario frmMovimiento"],
+            ["LoteController frmEditarLote", "Lotes"]
+        ],
+        [ // Comunidades, productores y seguimiento de la producción.
+            ["ComunidadController frmComunidad", "Comunidades"],
+            ["frmEmprendimiento EmprendimientoController frmImagenEmprendimiento",
+             "Emprendimientos EmprendimientoDetalle frmOferta"],
+            ["ProduccionController frmValidarProduccion", "Produccion frmProduccion"],
+            ["frmLote", "Trazabilidad frmTrazabilidad"]
+        ],
+        [ // Administración, permisos, auditoría e indicadores.
+            ["BitacoraController frmFiltrosBitacora", "Bitacora"],
+            [admin ? "frmMatrizPermisos RolController" : "", "Roles"],
+            ["UsuarioController frmUsuario", admin ? "Usuarios" : "Usuarios RolController"],
+            ["Dashboard", "DashboardController"],
+            ["ReporteController frmFiltrosReporte", "Reportes"]
+        ],
+        [ // Cuenta y entrada al panel. El catálogo queda del lado comercial.
+            ["Perfil frmPerfil", "AuthController frmLogin Login"],
+            ["frmPreferencias " + actor, "BusquedaController Inicio"],
+            [panel, "CatalogoController"],
+            ["", "Catalogo ProductoDetalle frmEncargo"]
+        ],
+        [ // Encargos y pedidos. Los formularios de pago dan hacia sus controladores.
+            ["Notificaciones", "NotificacionController"],
+            ["Entregas", "EntregaController frmEntrega"],
+            ["Pedidos frmEstadoPedido", "PedidoController frmCancelarPedido"],
+            ["PedidoDetalle", "frmRegistrarPago frmPagoCuota"],
+            ["Encargos frmEstadoEncargo", "EncargoController frmCancelarEncargo"]
+        ],
+        [ // Cobros, crédito, QR e indicadores financieros.
+            ["Finanzas", "FinanzasController frmRangoFechas"],
+            ["QrCobro", "QrController frmSubirQr"],
+            ["Pagos", "PagoController frmVerificarPago"],
+            ["PlanesPago", "PlanPagoController frmPagoCuotaPlan"],
+            ["MisMetodosPago", "MetodoPagoUsuarioController"]
+        ]
+    ];
+
+    var colMaxW = [];
+    var colX = [];
+    var alturas = [];
+    var colocados = 0;
+    var altoMaximo = 0;
+    var separacionCajas = 48;
+    var separacionModulos = 68;
+    var z, f, c, i;
+    for (z = 0; z < zonas.length; z++)
+    {
+        var altoZona = 0;
+        colMaxW[2 * z] = 0;
+        colMaxW[2 * z + 1] = 0;
+        for (f = 0; f < zonas[z].length; f++)
+        {
+            var fila = zonas[z][f];
+            var altoFila = 0;
+            for (c = 0; c < 2; c++)
+            {
+                var nombres = fila[c].split(" ");
+                var col = 2 * z + c;
+                var nodos = [];
+                var alto = 0;
+                for (i = 0; i < nombres.length; i++)
+                {
+                    // Personal comparte la plantilla y sólo incluye sus propias funciones.
+                    var n = grafo.nodeMap[nombres[i]];
+                    if (n == null) continue;
+                    n.col = col;
+                    if (nodos.length > 0) alto += separacionCajas;
+                    n.y = alto;
+                    nodos.push(n);
+                    alto += n.h;
+                    colMaxW[col] = Math.max(colMaxW[col], n.w);
+                    colocados++;
+                }
+                fila[c] = { nodos: nodos, alto: alto };
+                altoFila = Math.max(altoFila, alto);
+            }
+            if (altoFila == 0) continue;
+            if (altoZona > 0) altoZona += separacionModulos;
+            for (c = 0; c < 2; c++)
+            {
+                var columna = fila[c];
+                var base = altoZona + Math.floor((altoFila - columna.alto) / 2);
+                for (i = 0; i < columna.nodos.length; i++) columna.nodos[i].y += base;
+            }
+            altoZona += altoFila;
+        }
+        alturas[z] = altoZona;
+        altoMaximo = Math.max(altoMaximo, altoZona);
+    }
+    if (colocados != grafo.nodes.length) return null;
+
+    var x = 46;
+    for (c = 0; c < colMaxW.length; c++)
+    {
+        colX[c] = x;
+        // Entre zonas circulan los enlaces del menú; dentro de cada zona, las parejas ida/vuelta.
+        x += colMaxW[c] + (c % 2 == 0 ? 92 : 132);
+    }
+    for (i = 0; i < grafo.nodes.length; i++)
+    {
+        var nodo = grafo.nodes[i];
+        c = nodo.col;
+        nodo.x = colX[c] + Math.floor((colMaxW[c] - nodo.w) / 2);
+        nodo.y += 46 + Math.floor((altoMaximo - alturas[Math.floor(c / 2)]) / 2);
+    }
+    return { colX: colX, colMaxW: colMaxW, numCols: colX.length };
+}
+
+// Ruteo de los planos por rol en una cuadrícula. Cada casilla ofrece dos estados,
+// uno por orientación de llegada, para poder penalizar los codos sin perder caminos.
+function rutearPlanoPorModulos(grafo)
+{
+    var paso = 12, margen = 6;
+    var nodos = grafo.nodes, aristas = grafo.edges;
+    var i, j, n, e, x, y;
+    var ancho = 0, alto = 0;
+    var bordes = [];
+    for (i = 0; i < nodos.length; i++)
+    {
+        n = nodos[i];
+        ancho = Math.max(ancho, n.x + n.w);
+        alto = Math.max(alto, n.y + n.h);
+        bordes[n.id] = [[], [], [], [], []];
+    }
+
+    function asignarExtremo(arista, caja, lado, origen, ideal)
+    {
+        if (origen) arista.srcSide = lado;
+        else arista.dstSide = lado;
+        bordes[caja.id][lado].push({ edge: arista, isSrc: origen, ideal: ideal });
+    }
+
+    for (i = 0; i < aristas.length; i++)
+    {
+        e = aristas[i];
+        var s = e.src, d = e.dst;
+        var sx = s.x + s.w / 2, sy = s.y + s.h / 2;
+        var dx = d.x + d.w / 2, dy = d.y + d.h / 2;
+        var huecoX = Math.max(s.x, d.x) - Math.min(s.x + s.w, d.x + d.w);
+        var huecoY = Math.max(s.y, d.y) - Math.min(s.y + s.h, d.y + d.h);
+        var horizontal = huecoX >= huecoY;
+        var bordeS = horizontal ? (dx > sx ? 2 : 4) : (dy > sy ? 3 : 1);
+        var bordeD = (bordeS + 1) % 4 + 1;
+        var a = horizontal ? Math.max(s.y, d.y) : Math.max(s.x, d.x);
+        var b = horizontal ? Math.min(s.y + s.h, d.y + d.h) : Math.min(s.x + s.w, d.x + d.w);
+        var media = (a + b) / 2;
+        asignarExtremo(e, s, bordeS, true, b > a ? media : (horizontal ? dy : dx));
+        asignarExtremo(e, d, bordeD, false, b > a ? media : (horizontal ? sy : sx));
+    }
+
+    // Puertos en carriles diferentes, con el mismo orden en ambos extremos de un par.
+    for (i = 0; i < nodos.length; i++)
+    {
+        n = nodos[i];
+        for (var lado = 1; lado <= 4; lado++)
+        {
+            var lista = bordes[n.id][lado];
+            if (!lista.length) continue;
+            var lateral = lado == 2 || lado == 4;
+            var desde = lateral ? n.y : n.x;
+            var longitud = lateral ? n.h : n.w;
+            var primero = Math.ceil((desde + 5) / paso);
+            var ultimo = Math.floor((desde + longitud - 5) / paso);
+            lista.sort(function(a, b) { return (a.ideal - b.ideal) || (a.edge.id - b.edge.id); });
+            for (j = 0; j < lista.length; j++) lista[j].ideal /= paso;
+            resolverPosicionesPuertos(lista, primero, ultimo, 1);
+            for (j = 0; j < lista.length; j++)
+            {
+                var item = lista[j], pos = item.resolved * paso;
+                var puerto = lateral ? { x: lado == 2 ? n.x + n.w : n.x, y: pos } :
+                                       { x: pos, y: lado == 3 ? n.y + n.h : n.y };
+                if (item.isSrc) item.edge.srcPort = puerto;
+                else item.edge.dstPort = puerto;
+            }
+        }
+    }
+
+    var cols = Math.ceil(ancho / paso) + 5, filas = Math.ceil(alto / paso) + 5;
+    var bloqueada = [], usoH = [], usoV = [];
+    for (x = 0; x < cols; x++) bloqueada[x] = bloqueada[(filas - 1) * cols + x] = true;
+    for (y = 0; y < filas; y++) bloqueada[y * cols] = bloqueada[y * cols + cols - 1] = true;
+    for (i = 0; i < nodos.length; i++)
+    {
+        n = nodos[i];
+        var xMin = Math.ceil((n.x - margen) / paso), xMax = Math.floor((n.x + n.w + margen) / paso);
+        var yMin = Math.ceil((n.y - margen) / paso), yMax = Math.floor((n.y + n.h + margen) / paso);
+        for (y = yMin; y <= yMax; y++)
+            for (x = xMin; x <= xMax; x++) bloqueada[y * cols + x] = true;
+    }
+
+    function entrada(p, lado)
+    {
+        var cx = Math.round(p.x / paso), cy = Math.round(p.y / paso);
+        if (lado == 1) cy = Math.ceil((p.y - margen) / paso) - 1;
+        if (lado == 2) cx = Math.floor((p.x + margen) / paso) + 1;
+        if (lado == 3) cy = Math.floor((p.y + margen) / paso) + 1;
+        if (lado == 4) cx = Math.ceil((p.x - margen) / paso) - 1;
+        return cy * cols + cx;
+    }
+
+    var orden = aristas.slice(0);
+    function distancia(e)
+    {
+        return Math.abs(e.srcPort.x - e.dstPort.x) + Math.abs(e.srcPort.y - e.dstPort.y);
+    }
+    orden.sort(function(a, b) { return (distancia(a) - distancia(b)) || (a.id - b.id); });
+
+    var distanciaMin = [], previo = [], visita = [], cerrada = [];
+    var estados = [], costes = [];
+    function encolar(estado, coste)
+    {
+        var hijo = estados.length;
+        while (hijo > 0)
+        {
+            var padre = (hijo - 1) >> 1;
+            if (costes[padre] <= coste) break;
+            estados[hijo] = estados[padre];
+            costes[hijo] = costes[padre];
+            hijo = padre;
+        }
+        estados[hijo] = estado;
+        costes[hijo] = coste;
+    }
+    function desencolar()
+    {
+        var mejor = estados[0], ultimoEstado = estados.pop(), ultimoCoste = costes.pop();
+        var tam = estados.length, padre = 0;
+        if (tam > 0)
+        {
+            var hijo = 1;
+            while (hijo < tam)
+            {
+                if (hijo + 1 < tam && costes[hijo+1] < costes[hijo]) hijo++;
+                if (costes[hijo] >= ultimoCoste) break;
+                estados[padre] = estados[hijo];
+                costes[padre] = costes[hijo];
+                padre = hijo;
+                hijo = 2 * padre + 1;
+            }
+            estados[padre] = ultimoEstado;
+            costes[padre] = ultimoCoste;
+        }
+        return mejor;
+    }
+
+    function anexar(puntos, p)
+    {
+        var k = puntos.length, anterior = puntos[k-1];
+        if (anterior && anterior.x == p.x && anterior.y == p.y) return;
+        if (k > 1 && ((puntos[k-2].x == p.x && anterior.x == p.x) ||
+                      (puntos[k-2].y == p.y && anterior.y == p.y))) puntos.pop();
+        puntos.push(p);
+    }
+
+    var saltos = [-1, 1, -cols, cols];
+    for (i = 0; i < orden.length; i++)
+    {
+        e = orden[i];
+        var inicio = entrada(e.srcPort, e.srcSide), fin = entrada(e.dstPort, e.dstSide);
+        // Dos cajas muy próximas pueden compartir un pasillo más estrecho que una casilla.
+        // Unir directamente sólo cuando enfrentan sus puertos y el tramo está libre.
+        if (e.srcSide == (e.dstSide + 1) % 4 + 1 &&
+            (e.srcSide % 2 ? e.srcPort.x == e.dstPort.x : e.srcPort.y == e.dstPort.y))
+        {
+            var recto = true;
+            var p = e.srcPort, q = e.dstPort;
+            for (j = 0; j < nodos.length && recto; j++)
+            {
+                n = nodos[j];
+                if (n == e.src || n == e.dst) continue;
+                if (p.y == q.y)
+                    recto = p.y < n.y - margen || p.y > n.y + n.h + margen ||
+                        Math.max(p.x,q.x) < n.x - margen || Math.min(p.x,q.x) > n.x + n.w + margen;
+                else
+                    recto = p.x < n.x - margen || p.x > n.x + n.w + margen ||
+                        Math.max(p.y,q.y) < n.y - margen || Math.min(p.y,q.y) > n.y + n.h + margen;
+            }
+            if (recto)
+            {
+                var delta = p.y == q.y ? 1 : cols;
+                var ocupada = p.y == q.y ? usoH : usoV;
+                var libre = true;
+                for (var pasoRecto = Math.min(inicio,fin); pasoRecto < Math.max(inicio,fin); pasoRecto += delta)
+                    if (ocupada[pasoRecto]) libre = false;
+                if (libre)
+                {
+                    for (pasoRecto = Math.min(inicio,fin); pasoRecto < Math.max(inicio,fin); pasoRecto += delta)
+                        ocupada[pasoRecto] = 1;
+                    e.waypoints = [];
+                    continue;
+                }
+            }
+        }
+        if (bloqueada[inicio] || bloqueada[fin]) return false;
+        var ejeS = e.srcSide % 2, ejeD = e.dstSide % 2; // 0 horizontal, 1 vertical
+        var estadoInicial = 2 * inicio + ejeS;
+        var finX = fin % cols, finY = Math.floor(fin / cols);
+        estados.length = 0;
+        costes.length = 0;
+        encolar(estadoInicial, 0);
+        visita[estadoInicial] = i;
+        distanciaMin[estadoInicial] = 0;
+        previo[estadoInicial] = -1;
+        var mejorFin = -1;
+        while (estados.length)
+        {
+            var actual = desencolar(), casilla = actual >> 1, eje = actual & 1;
+            if (cerrada[actual] == i) continue;
+            cerrada[actual] = i;
+            if (casilla == fin) { mejorFin = actual; break; }
+            for (j = 0; j < 4; j++)
+            {
+                var vecino = casilla + saltos[j], ejeNuevo = j >> 1;
+                if (bloqueada[vecino]) continue;
+                var siguiente = vecino * 2 + ejeNuevo;
+                var tramo = Math.min(casilla, vecino);
+                var longitudinal = ejeNuevo ? usoV : usoH;
+                var transversal = ejeNuevo ? usoH : usoV;
+                var coste = distanciaMin[actual] + 10 + (eje == ejeNuevo ? 0 : 32) +
+                    (longitudinal[tramo] || 0) * 35 + (transversal[vecino] || 0) * 8;
+                if (vecino == fin && ejeNuevo != ejeD) coste += 32;
+                if (visita[siguiente] == i && coste >= distanciaMin[siguiente]) continue;
+                if (cerrada[siguiente] == i) continue;
+                visita[siguiente] = i;
+                distanciaMin[siguiente] = coste;
+                previo[siguiente] = actual;
+                var h = Math.abs(vecino % cols - finX) + Math.abs(Math.floor(vecino / cols) - finY);
+                encolar(siguiente, coste + h * 12);
+            }
+        }
+        if (mejorFin == -1) return false;
+        var camino = [];
+        for (var k = mejorFin; k != -1; k = previo[k]) camino.push(k >> 1);
+        var puntos = [e.srcPort];
+        for (k = camino.length - 1; k >= 0; k--)
+        {
+            var v = camino[k];
+            anexar(puntos, { x: (v % cols) * paso, y: Math.floor(v / cols) * paso });
+            if (k > 0)
+            {
+                var w = camino[k-1];
+                var uso = Math.abs(v - w) == 1 ? usoH : usoV;
+                var indice = Math.min(v, w);
+                uso[indice] = (uso[indice] || 0) + 1;
+            }
+        }
+        anexar(puntos, e.dstPort);
+        e.waypoints = puntos.slice(1, puntos.length - 1);
+    }
+    return true;
+}
+
+function planoCubreGrafo(plano, grafo)
+{
+    var i;
+    var rutasUsadas = {};
+    for (i = 0; i < grafo.nodes.length; i++)
+    {
+        if (!plano.cajas.hasOwnProperty(grafo.nodes[i].name)) return false;
+    }
+    for (i = 0; i < grafo.edges.length; i++)
+    {
+        var e = grafo.edges[i];
+        var clave = e.src.name + ">" + e.dst.name;
+        if (!plano.rutas.hasOwnProperty(clave) || rutasUsadas[clave]) return false;
+        rutasUsadas[clave] = true;
+    }
+    return true;
+}
+
+function finalizarDiagrama(ctx, plano, ubicarModulos)
 {
     var pkg = ctx.pkg;
     var diagram = ctx.diagram;
     var grafo = ctx.grafo;
     var i;
+
+    if (plano && !planoCubreGrafo(plano, grafo))
+    {
+        Session.Output("El plano de Cliente no cubre todos los elementos o relaciones. Se usará la distribución automática.");
+        plano = null;
+    }
 
     // Pasada 1: Refrescar y recargar diagrama para leer dimensiones mínimas reales de EA
     diagram.DiagramObjects.Refresh();
@@ -3826,6 +4385,19 @@ function finalizarDiagrama(ctx)
         if (realObj != null)
         {
             nd.obj = realObj;
+        }
+
+        if (plano)
+        {
+            var caja = plano.cajas[nd.name];
+            nd.x = caja[0];
+            nd.y = caja[1];
+            nd.w = caja[2];
+            nd.h = caja[3];
+            continue;
+        }
+        if (realObj != null)
+        {
             var eaW = Math.abs(realObj.right - realObj.left);
             var eaH = Math.abs(realObj.bottom - realObj.top);
             if (eaW > nd.w) nd.w = eaW;
@@ -3838,7 +4410,9 @@ function finalizarDiagrama(ctx)
 
     // Pasada 2: Calcular posiciones finales sin solapes y actualizar DiagramObjects
     // (En EA, al editar propiedades directas left/right/top/bottom, Y hacia abajo es negativo)
-    var meta = calcularPosicionesGrafo(grafo);
+    var meta;
+    var porModulos = !plano && MODO_HORIZONTAL_CARTA && ubicarModulos && ubicarModulos(grafo);
+    if (!plano && !porModulos) meta = calcularPosicionesGrafo(grafo);
 
     for (i = 0; i < grafo.nodes.length; i++)
     {
@@ -3857,7 +4431,10 @@ function finalizarDiagrama(ctx)
     diagram.Update();
 
     // Pasada 3: Calcular rutas ortogonales multicarril y escribirlas en DiagramLinks
-    rutearConectoresOrtogonales(grafo, meta);
+    if (!plano && !(porModulos && rutearPlanoPorModulos(grafo)))
+    {
+        rutearConectoresOrtogonales(grafo, porModulos || meta);
+    }
 
     diagram.DiagramLinks.Refresh();
     var linkByConnId = {};
@@ -3883,28 +4460,17 @@ function finalizarDiagrama(ctx)
             dl.ConnectorID = e.conn.ConnectorID;
         }
 
-        // Offsets relativos al centro de cada caja en coordenadas cartesianas de EA (+Y arriba, -Y abajo)
-        var scx = e.src.x + e.src.w / 2;
-        var scy = e.src.y + e.src.h / 2;
-        var dcx = e.dst.x + e.dst.w / 2;
-        var dcy = e.dst.y + e.dst.h / 2;
-
-        var sx = (e.srcSide == 1 || e.srcSide == 3) ? Math.round(e.srcPort.x - scx) : 0;
-        var sy = (e.srcSide == 2 || e.srcSide == 4) ? Math.round(scy - e.srcPort.y) : 0;
-        var ex = (e.dstSide == 1 || e.dstSide == 3) ? Math.round(e.dstPort.x - dcx) : 0;
-        var ey = (e.dstSide == 2 || e.dstSide == 4) ? Math.round(dcy - e.dstPort.y) : 0;
-
-        var pathParts = [];
-        for (var k = 0; k < e.waypoints.length; k++)
-        {
-            var wp = e.waypoints[k];
-            pathParts.push(Math.round(wp.x) + ":" + (-Math.round(wp.y)));
-        }
-        var pathStr = (pathParts.length > 0) ? (pathParts.join(";") + ";") : "";
-
         dl.Style = baseStyle;
-        dl.Geometry = "EDGE=" + e.srcSide + ";SX=" + sx + ";SY=" + sy + ";EX=" + ex + ";EY=" + ey + ";";
-        dl.Path = pathStr;
+        if (plano)
+        {
+            var ruta = plano.rutas[e.src.name + ">" + e.dst.name];
+            dl.Geometry = ruta.geometry;
+            dl.Path = ruta.path;
+        }
+        else
+        {
+            aplicarRutaCalculada(dl, e);
+        }
         dl.IsHidden = false;
         dl.Update();
     }
@@ -3918,6 +4484,31 @@ function finalizarDiagrama(ctx)
     Repository.RefreshModelView(pkg.PackageID);
 
     Session.Output("Layout completado: " + grafo.nodes.length + " elementos y " + grafo.edges.length + " conectores ortogonales.");
+}
+
+function aplicarRutaCalculada(dl, e)
+{
+    // Offsets relativos al centro de cada caja en coordenadas cartesianas de EA (+Y arriba, -Y abajo)
+    var scx = e.src.x + e.src.w / 2;
+    var scy = e.src.y + e.src.h / 2;
+    var dcx = e.dst.x + e.dst.w / 2;
+    var dcy = e.dst.y + e.dst.h / 2;
+
+    var sx = (e.srcSide == 1 || e.srcSide == 3) ? Math.round(e.srcPort.x - scx) : 0;
+    var sy = (e.srcSide == 2 || e.srcSide == 4) ? Math.round(scy - e.srcPort.y) : 0;
+    var ex = (e.dstSide == 1 || e.dstSide == 3) ? Math.round(e.dstPort.x - dcx) : 0;
+    var ey = (e.dstSide == 2 || e.dstSide == 4) ? Math.round(dcy - e.dstPort.y) : 0;
+
+    var pathParts = [];
+    for (var k = 0; k < e.waypoints.length; k++)
+    {
+        var wp = e.waypoints[k];
+        pathParts.push(Math.round(wp.x) + ":" + (-Math.round(wp.y)));
+    }
+    var pathStr = (pathParts.length > 0) ? (pathParts.join(";") + ";") : "";
+
+    dl.Geometry = "EDGE=" + e.srcSide + ";SX=" + sx + ";SY=" + sy + ";EX=" + ex + ";EY=" + ey + ";";
+    dl.Path = pathStr;
 }
 
 /* ============================================================
