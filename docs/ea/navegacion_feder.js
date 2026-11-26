@@ -3974,44 +3974,43 @@ function ubicarPersonalAdministrativo(grafo)
     var actor = admin ? "Administrador" : "Personal";
     var panel = admin ? "PanelAdministrador" : "PanelPersonal";
     var zonas = [
-        [ // Catálogo e inventario: los lotes y sus movimientos quedan junto a producción.
-            ["CategoriaController frmCategoria", "Categorias"],
-            ["ProductoController frmProducto", "Productos"],
-            ["AlertaController frmAtenderAlerta", "Alertas"],
-            ["InventarioController", "Inventario frmMovimiento"],
-            ["LoteController frmEditarLote", "Lotes"]
-        ],
         [ // Comunidades, productores y seguimiento de la producción.
             ["ComunidadController frmComunidad", "Comunidades"],
-            ["frmEmprendimiento EmprendimientoController frmImagenEmprendimiento",
-             "Emprendimientos EmprendimientoDetalle frmOferta"],
-            ["ProduccionController frmValidarProduccion", "Produccion frmProduccion"],
+            ["frmEmprendimiento EmprendimientoController frmImagenEmprendimiento", "Emprendimientos EmprendimientoDetalle frmOferta"],
+            ["frmValidarProduccion ProduccionController", "Produccion frmProduccion"],
             ["frmLote", "Trazabilidad frmTrazabilidad"]
         ],
+        [ // Catálogo e inventario: los lotes y sus movimientos quedan junto a producción.
+            ["CategoriaController frmCategoria", "Categorias"],
+            ["Productos", "ProductoController frmProducto"],
+            ["Alertas", "AlertaController frmAtenderAlerta"],
+            ["Inventario frmMovimiento", "InventarioController"],
+            ["Lotes", "frmEditarLote LoteController"]
+        ],
         [ // Administración, permisos, auditoría e indicadores.
-            ["BitacoraController frmFiltrosBitacora", "Bitacora"],
-            [admin ? "frmMatrizPermisos RolController" : "", "Roles"],
             ["UsuarioController frmUsuario", admin ? "Usuarios" : "Usuarios RolController"],
+            [admin ? "frmMatrizPermisos RolController" : "", "Roles"],
             ["Dashboard", "DashboardController"],
+            ["BitacoraController frmFiltrosBitacora", "Bitacora"],
             ["ReporteController frmFiltrosReporte", "Reportes"]
         ],
         [ // Cuenta y entrada al panel. El catálogo queda del lado comercial.
-            ["Perfil frmPerfil", "AuthController frmLogin Login"],
+            ["frmPerfil Perfil", "AuthController frmLogin Login"],
             ["frmPreferencias " + actor, "BusquedaController Inicio"],
             [panel, "CatalogoController"],
             ["", "Catalogo ProductoDetalle frmEncargo"]
         ],
         [ // Encargos y pedidos. Los formularios de pago dan hacia sus controladores.
-            ["Notificaciones", "NotificacionController"],
             ["Entregas", "EntregaController frmEntrega"],
+            ["Notificaciones", "NotificacionController"],
             ["Pedidos frmEstadoPedido", "PedidoController frmCancelarPedido"],
             ["PedidoDetalle", "frmRegistrarPago frmPagoCuota"],
-            ["Encargos frmEstadoEncargo", "EncargoController frmCancelarEncargo"]
+            ["frmEstadoEncargo Encargos", "frmCancelarEncargo EncargoController"]
         ],
         [ // Cobros, crédito, QR e indicadores financieros.
-            ["Finanzas", "FinanzasController frmRangoFechas"],
             ["QrCobro", "QrController frmSubirQr"],
-            ["Pagos", "PagoController frmVerificarPago"],
+            ["Finanzas", "FinanzasController frmRangoFechas"],
+            ["Pagos", "frmVerificarPago PagoController"],
             ["PlanesPago", "PlanPagoController frmPagoCuotaPlan"],
             ["MisMetodosPago", "MetodoPagoUsuarioController"]
         ]
@@ -4093,6 +4092,7 @@ function ubicarPersonalAdministrativo(grafo)
 function rutearPlanoPorModulos(grafo)
 {
     var paso = 12, margen = 6;
+    var costoSolape = 2400, costoCruce = 180, costoCodo = 32;
     var nodos = grafo.nodes, aristas = grafo.edges;
     var i, j, n, e, x, y;
     var ancho = 0, alto = 0;
@@ -4235,9 +4235,21 @@ function rutearPlanoPorModulos(grafo)
     }
 
     var saltos = [-1, 1, -cols, cols];
-    for (i = 0; i < orden.length; i++)
+    var recorridos = [];
+    function reservar(camino, cambio)
     {
-        e = orden[i];
+        for (var k = 1; k < camino.length; k++)
+        {
+            var a = camino[k-1], b = camino[k];
+            var uso = Math.abs(a - b) == 1 ? usoH : usoV;
+            var indice = Math.min(a, b);
+            uso[indice] = (uso[indice] || 0) + cambio;
+        }
+    }
+
+    function rutear(arista, turno)
+    {
+        var e = arista, j, n;
         var inicio = entrada(e.srcPort, e.srcSide), fin = entrada(e.dstPort, e.dstSide);
         // Dos cajas muy próximas pueden compartir un pasillo más estrecho que una casilla.
         // Unir directamente sólo cuando enfrentan sus puertos y el tramo está libre.
@@ -4269,7 +4281,7 @@ function rutearPlanoPorModulos(grafo)
                     for (pasoRecto = Math.min(inicio,fin); pasoRecto < Math.max(inicio,fin); pasoRecto += delta)
                         ocupada[pasoRecto] = 1;
                     e.waypoints = [];
-                    continue;
+                    return true;
                 }
             }
         }
@@ -4280,15 +4292,15 @@ function rutearPlanoPorModulos(grafo)
         estados.length = 0;
         costes.length = 0;
         encolar(estadoInicial, 0);
-        visita[estadoInicial] = i;
+        visita[estadoInicial] = turno;
         distanciaMin[estadoInicial] = 0;
         previo[estadoInicial] = -1;
         var mejorFin = -1;
         while (estados.length)
         {
             var actual = desencolar(), casilla = actual >> 1, eje = actual & 1;
-            if (cerrada[actual] == i) continue;
-            cerrada[actual] = i;
+            if (cerrada[actual] == turno) continue;
+            cerrada[actual] = turno;
             if (casilla == fin) { mejorFin = actual; break; }
             for (j = 0; j < 4; j++)
             {
@@ -4298,16 +4310,16 @@ function rutearPlanoPorModulos(grafo)
                 var tramo = Math.min(casilla, vecino);
                 var longitudinal = ejeNuevo ? usoV : usoH;
                 var transversal = ejeNuevo ? usoH : usoV;
-                var coste = distanciaMin[actual] + 10 + (eje == ejeNuevo ? 0 : 32) +
-                    (longitudinal[tramo] || 0) * 35 + (transversal[vecino] || 0) * 8;
-                if (vecino == fin && ejeNuevo != ejeD) coste += 32;
-                if (visita[siguiente] == i && coste >= distanciaMin[siguiente]) continue;
-                if (cerrada[siguiente] == i) continue;
-                visita[siguiente] = i;
+                var coste = distanciaMin[actual] + 10 + (eje == ejeNuevo ? 0 : costoCodo) +
+                    (longitudinal[tramo] || 0) * costoSolape + (transversal[vecino] || 0) * costoCruce;
+                if (vecino == fin && ejeNuevo != ejeD) coste += costoCodo;
+                if (visita[siguiente] == turno && coste >= distanciaMin[siguiente]) continue;
+                if (cerrada[siguiente] == turno) continue;
+                visita[siguiente] = turno;
                 distanciaMin[siguiente] = coste;
                 previo[siguiente] = actual;
                 var h = Math.abs(vecino % cols - finX) + Math.abs(Math.floor(vecino / cols) - finY);
-                encolar(siguiente, coste + h * 12);
+                encolar(siguiente, coste + h * 10);
             }
         }
         if (mejorFin == -1) return false;
@@ -4318,16 +4330,39 @@ function rutearPlanoPorModulos(grafo)
         {
             var v = camino[k];
             anexar(puntos, { x: (v % cols) * paso, y: Math.floor(v / cols) * paso });
-            if (k > 0)
-            {
-                var w = camino[k-1];
-                var uso = Math.abs(v - w) == 1 ? usoH : usoV;
-                var indice = Math.min(v, w);
-                uso[indice] = (uso[indice] || 0) + 1;
-            }
         }
         anexar(puntos, e.dstPort);
         e.waypoints = puntos.slice(1, puntos.length - 1);
+        recorridos[e.id] = camino;
+        reservar(camino, 1);
+        return true;
+    }
+
+    for (i = 0; i < orden.length; i++)
+        if (!rutear(orden[i], i)) return false;
+
+    // Con el plano completo ya se ven los cruces que introdujeron las últimas rutas.
+    // Reconsiderar primero los recorridos más congestionados, conservando todos los puertos.
+    var candidatos = [];
+    for (i = 0; i < orden.length; i++)
+    {
+        e = orden[i];
+        var camino = recorridos[e.id];
+        if (!camino) continue;
+        var cruces = 0;
+        for (j = 1; j < camino.length; j++)
+        {
+            var transversal = Math.abs(camino[j] - camino[j-1]) == 1 ? usoV : usoH;
+            cruces += transversal[camino[j]] || 0;
+        }
+        if (cruces) candidatos.push({ arista: e, cruces: cruces });
+    }
+    candidatos.sort(function(a, b) { return b.cruces - a.cruces || a.arista.id - b.arista.id; });
+    for (i = 0; i < candidatos.length; i++)
+    {
+        e = candidatos[i].arista;
+        reservar(recorridos[e.id], -1);
+        if (!rutear(e, orden.length + i)) return false;
     }
     return true;
 }
@@ -4435,6 +4470,7 @@ function finalizarDiagrama(ctx, plano, ubicarModulos)
     {
         rutearConectoresOrtogonales(grafo, porModulos || meta);
     }
+    if (porModulos) separarEtiquetasDePares(grafo);
 
     diagram.DiagramLinks.Refresh();
     var linkByConnId = {};
@@ -4486,6 +4522,40 @@ function finalizarDiagrama(ctx, plano, ubicarModulos)
     Session.Output("Layout completado: " + grafo.nodes.length + " elementos y " + grafo.edges.length + " conectores ortogonales.");
 }
 
+// EA centra el texto en los tramos rectos. En las parejas cercanas, colocar
+// cada estereotipo por fuera de su carril deja legibles ambas direcciones.
+function separarEtiquetasDePares(grafo)
+{
+    var anchos = { link: 25, build: 30, submit: 38, response: 47, redirect: 41 };
+    var rectas = {};
+    for (var i = 0; i < grafo.edges.length; i++)
+    {
+        var e = grafo.edges[i];
+        if (e.waypoints.length || !anchos[e.stereotype]) continue;
+        var inversa = rectas[e.dst.id + ">" + e.src.id];
+        rectas[e.src.id + ">" + e.dst.id] = e;
+        if (!inversa) continue;
+
+        var vertical = e.srcPort.x == e.dstPort.x && inversa.srcPort.x == inversa.dstPort.x;
+        var horizontal = e.srcPort.y == e.dstPort.y && inversa.srcPort.y == inversa.dstPort.y;
+        if (!vertical && !horizontal) continue;
+        var delta = vertical ? e.srcPort.x - inversa.srcPort.x : e.srcPort.y - inversa.srcPort.y;
+        if (Math.abs(delta) > (vertical ? 48 : 22)) continue;
+
+        var pareja = [e, inversa];
+        var lado = delta < 0 ? -1 : 1;
+        for (var j = 0; j < pareja.length; j++)
+        {
+            var ancho = anchos[pareja[j].stereotype];
+            var ox = vertical ? lado * (Math.ceil(ancho / 2) + 3) : 0;
+            var oy = horizontal && lado < 0 ? -14 : 0;
+            pareja[j].etiqueta = "$LLB=;LLT=;LMT=;LMB=CX=" + ancho + ":CY=14:OX=" + ox + ":OY=" + oy +
+                ":HDN=0:BLD=0:ITA=0:UND=0:CLR=-1:ALN=0:DIR=0:ROT=0;LRT=;LRB=;IRHS=;ILHS=;";
+            lado = -lado;
+        }
+    }
+}
+
 function aplicarRutaCalculada(dl, e)
 {
     // Offsets relativos al centro de cada caja en coordenadas cartesianas de EA (+Y arriba, -Y abajo)
@@ -4507,7 +4577,7 @@ function aplicarRutaCalculada(dl, e)
     }
     var pathStr = (pathParts.length > 0) ? (pathParts.join(";") + ";") : "";
 
-    dl.Geometry = "EDGE=" + e.srcSide + ";SX=" + sx + ";SY=" + sy + ";EX=" + ex + ";EY=" + ey + ";";
+    dl.Geometry = "EDGE=" + e.srcSide + ";SX=" + sx + ";SY=" + sy + ";EX=" + ex + ";EY=" + ey + ";" + (e.etiqueta || "");
     dl.Path = pathStr;
 }
 
