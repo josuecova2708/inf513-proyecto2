@@ -25,17 +25,17 @@ class LoteController extends Controller
         ]);
         $u = $request->user();
         $q = DB::table('lote as l')
-            ->join('produccion as pr', 'pr.id', '=', 'l.produccion_id')
-            ->join('producto as p', 'p.id', '=', 'pr.producto_id')
-            ->join('emprendimiento as e', 'e.id', '=', 'pr.emprendimiento_id')
-            ->join('comunidad as c', 'c.id', '=', 'e.comunidad_id')
+            ->join('produccion as pr', 'pr.id_produccion', '=', 'l.produccion_id')
+            ->join('producto as p', 'p.id_producto', '=', 'pr.producto_id')
+            ->join('emprendimiento as e', 'e.id_emprendimiento', '=', 'pr.emprendimiento_id')
+            ->join('comunidad as c', 'c.id_comunidad', '=', 'e.comunidad_id')
             ->when(! $u->esStaff(), fn ($w) => $w->where('e.usuario_id', $u->id))
             ->when($f['estado'] ?? null, fn ($w, $s) => $w->where('l.estado', $s))
             ->when($f['producto_id'] ?? null, fn ($w, $p) => $w->where('pr.producto_id', $p))
             ->when($f['q'] ?? null, fn ($w, $t) => $w->where(fn ($x) => $x->where('l.codigo', 'ilike', $this->like($t))
                 ->orWhere('p.nombre', 'ilike', $this->like($t))->orWhere('e.nombre', 'ilike', $this->like($t))))
             ->orderByRaw("CASE l.estado WHEN 'disponible' THEN 0 ELSE 1 END")->orderBy('l.fecha_vencimiento')
-            ->select('l.*', 'p.nombre as producto', 'p.unidad_medida', 'e.nombre as emprendimiento', 'c.nombre as comunidad',
+            ->select('l.*', 'l.id_lote as id', 'p.nombre as producto', 'p.unidad_medida', 'e.nombre as emprendimiento', 'c.nombre as comunidad',
                 DB::raw('(l.fecha_vencimiento - CURRENT_DATE) AS dias_para_vencer'));
 
         return $this->paginado($q->paginate($this->porPagina($request)));
@@ -45,7 +45,7 @@ class LoteController extends Controller
     public function store(Request $request): JsonResponse
     {
         $d = $request->validate([
-            'produccion_id' => ['required', 'integer', 'exists:produccion,id'],
+            'produccion_id' => ['required', 'integer', 'exists:produccion,id_produccion'],
             'codigo' => ['required', 'string', 'max:30', 'regex:/^[A-Z0-9][A-Z0-9-]{2,29}$/', 'unique:lote,codigo'],
             'cantidad' => ['required', 'numeric', 'gt:0', 'max:10000000'],
             'fecha_vencimiento' => ['nullable', 'date', 'after_or_equal:today'],
@@ -58,7 +58,7 @@ class LoteController extends Controller
         ]);
 
         $lote = DB::transaction(function () use ($d, $request) {
-            $pr = DB::table('produccion')->where('id', $d['produccion_id'])->lockForUpdate()->first();
+            $pr = DB::table('produccion')->where('id_produccion', $d['produccion_id'])->lockForUpdate()->first(['*', 'id_produccion as id']);
             if ($pr->estado !== 'validada') {
                 throw new ErrorNegocio('Solo se pueden ingresar lotes de producción VALIDADA.');
             }
@@ -72,7 +72,7 @@ class LoteController extends Controller
             ])->id;
             DB::select('SELECT fn_revisar_stock_minimo(?)', [$pr->producto_id]);
 
-            return DB::table('lote')->where('id', $id)->first();
+            return DB::table('lote')->where('id_lote', $id)->first(['*', 'id_lote as id']);
         });
 
         return $this->mensaje("Lote {$lote->codigo} ingresado al inventario.", ['lote' => $lote], 201);
@@ -87,45 +87,45 @@ class LoteController extends Controller
             'costo_unitario' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'estado' => ['required', Rule::in(['disponible', 'agotado', 'vencido'])],
         ]);
-        $n = DB::table('lote')->where('id', $id)->where('version', $d['version'])->update([
+        $n = DB::table('lote')->where('id_lote', $id)->where('version', $d['version'])->update([
             'fecha_vencimiento' => $d['fecha_vencimiento'] ?? null,
             'costo_unitario' => $d['costo_unitario'] ?? null,
             'estado' => $d['estado'],
             'version' => DB::raw('version + 1'),
         ]);
         if ($n === 0) {
-            abort_unless(DB::table('lote')->where('id', $id)->exists(), 404, 'El lote no existe.');
+            abort_unless(DB::table('lote')->where('id_lote', $id)->exists(), 404, 'El lote no existe.');
             throw new ErrorNegocio('El lote fue modificado por otro usuario mientras lo editaba. Recargue los datos e intente de nuevo.', 409);
         }
 
-        return $this->mensaje('Lote actualizado.', ['lote' => DB::table('lote')->where('id', $id)->first()]);
+        return $this->mensaje('Lote actualizado.', ['lote' => DB::table('lote')->where('id_lote', $id)->first(['*', 'id_lote as id'])]);
     }
 
     /** Trazabilidad hacia atrás y adelante de un lote: origen (productor/comunidad) y pedidos donde se vendió. */
     public function trazabilidadLote(string $codigo): JsonResponse
     {
         $lote = DB::table('lote as l')
-            ->join('produccion as pr', 'pr.id', '=', 'l.produccion_id')
-            ->join('producto as p', 'p.id', '=', 'pr.producto_id')
-            ->join('emprendimiento as e', 'e.id', '=', 'pr.emprendimiento_id')
-            ->join('comunidad as c', 'c.id', '=', 'e.comunidad_id')
-            ->leftJoin('usuario as v', 'v.id', '=', 'pr.validado_por')
+            ->join('produccion as pr', 'pr.id_produccion', '=', 'l.produccion_id')
+            ->join('producto as p', 'p.id_producto', '=', 'pr.producto_id')
+            ->join('emprendimiento as e', 'e.id_emprendimiento', '=', 'pr.emprendimiento_id')
+            ->join('comunidad as c', 'c.id_comunidad', '=', 'e.comunidad_id')
+            ->leftJoin('usuario as v', 'v.id_usuario', '=', 'pr.validador_id')
             ->whereRaw('upper(l.codigo) = upper(?)', [$codigo])
-            ->first(['l.*', 'p.nombre as producto', 'p.unidad_medida', 'pr.id as produccion_id', 'pr.fecha_produccion', 'pr.procedencia',
+            ->first(['l.*', 'l.id_lote as id', 'p.nombre as producto', 'p.unidad_medida', 'pr.id_produccion as produccion_id', 'pr.fecha_produccion', 'pr.procedencia',
                 'pr.fecha_validacion', 'e.nombre as emprendimiento', 'e.responsable', 'e.latitud', 'e.longitud',
                 'c.nombre as comunidad', 'c.municipio', 'c.provincia', DB::raw("v.nombre || ' ' || v.apellido AS validador")]);
         if (! $lote) {
             throw new ErrorNegocio("No existe el lote {$codigo}.", 404);
         }
-        $movimientos = DB::table('movimiento_inventario as m')->leftJoin('usuario as u', 'u.id', '=', 'm.usuario_id')
+        $movimientos = DB::table('movimiento_inventario as m')->leftJoin('usuario as u', 'u.id_usuario', '=', 'm.usuario_id')
             ->where('m.lote_id', $lote->id)->orderBy('m.fecha')
             ->get(['m.tipo', 'm.cantidad', 'm.fecha', 'm.motivo', DB::raw("u.nombre || ' ' || u.apellido AS usuario")]);
         $pedidos = DB::table('reserva_lote as rl')
-            ->join('detalle_pedido as dp', 'dp.id', '=', 'rl.detalle_pedido_id')
-            ->join('pedido as pe', 'pe.id', '=', 'dp.pedido_id')
-            ->join('usuario as u', 'u.id', '=', 'pe.cliente_id')
+            ->join('detalle_pedido as dp', 'dp.id_detalle_pedido', '=', 'rl.detalle_pedido_id')
+            ->join('pedido as pe', 'pe.id_pedido', '=', 'dp.pedido_id')
+            ->join('usuario as u', 'u.id_usuario', '=', 'pe.cliente_id')
             ->where('rl.lote_id', $lote->id)->orderByDesc('pe.fecha')
-            ->get(['pe.id', 'pe.numero', 'pe.fecha', 'pe.estado', 'rl.cantidad', 'rl.estado as estado_reserva', DB::raw("u.nombre || ' ' || u.apellido AS cliente")]);
+            ->get(['pe.id_pedido as id', 'pe.numero', 'pe.fecha', 'pe.estado', 'rl.cantidad', 'rl.estado as estado_reserva', DB::raw("u.nombre || ' ' || u.apellido AS cliente")]);
 
         return response()->json(compact('lote', 'movimientos', 'pedidos'));
     }
@@ -133,7 +133,7 @@ class LoteController extends Controller
     /** Trazabilidad de un pedido: de cada unidad vendida hasta su lote, productor y comunidad (v_trazabilidad). */
     public function trazabilidadPedido(Request $request, string $numero): JsonResponse
     {
-        $pedido = DB::table('pedido')->whereRaw('upper(numero) = upper(?)', [$numero])->first(['id', 'numero', 'cliente_id', 'estado', 'fecha']);
+        $pedido = DB::table('pedido')->whereRaw('upper(numero) = upper(?)', [$numero])->first(['id_pedido as id', 'numero', 'cliente_id', 'estado', 'fecha']);
         if (! $pedido || (! $request->user()->esStaff() && $pedido->cliente_id !== $request->user()->id)) {
             throw new ErrorNegocio("No existe el pedido {$numero}.", 404);
         }

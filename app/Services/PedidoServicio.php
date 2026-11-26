@@ -52,9 +52,9 @@ class PedidoServicio
     public static function nuevoPedido(int $clienteId, string $origen = 'inmediato', ?int $encargoId = null): int
     {
         return (int) DB::selectOne(
-            "WITH s AS (SELECT nextval(pg_get_serial_sequence('pedido', 'id'))::int AS id)
-             INSERT INTO pedido (id, numero, cliente_id, origen, encargo_id)
-             SELECT id, 'PED-' || lpad(id::text, 6, '0'), ?, ?, ? FROM s RETURNING id",
+            "WITH s AS (SELECT nextval(pg_get_serial_sequence('pedido', 'id_pedido'))::int AS id)
+             INSERT INTO pedido (id_pedido, numero, cliente_id, origen, encargo_id)
+             SELECT id, 'PED-' || lpad(id::text, 6, '0'), ?, ?, ? FROM s RETURNING id_pedido AS id",
             [$clienteId, $origen, $encargoId]
         )->id;
     }
@@ -63,9 +63,9 @@ class PedidoServicio
     public static function carritoId(int $clienteId, bool $crear = false): ?int
     {
         $id = DB::selectOne(
-            "SELECT p.id FROM pedido p WHERE p.cliente_id = ? AND p.estado = 'pendiente' AND p.origen = 'inmediato'
-               AND NOT EXISTS (SELECT 1 FROM entrega en WHERE en.pedido_id = p.id)
-             ORDER BY p.id LIMIT 1 FOR UPDATE",
+            "SELECT p.id_pedido AS id FROM pedido p WHERE p.cliente_id = ? AND p.estado = 'pendiente' AND p.origen = 'inmediato'
+               AND NOT EXISTS (SELECT 1 FROM entrega en WHERE en.pedido_id = p.id_pedido)
+             ORDER BY p.id_pedido LIMIT 1 FOR UPDATE",
             [$clienteId]
         )?->id;
 
@@ -74,22 +74,22 @@ class PedidoServicio
 
     public static function recalcular(int $pedidoId): void
     {
-        DB::update('UPDATE pedido SET subtotal = COALESCE((SELECT SUM(dp.subtotal) FROM detalle_pedido dp WHERE dp.pedido_id = ?), 0) WHERE id = ?', [$pedidoId, $pedidoId]);
+        DB::update('UPDATE pedido SET subtotal = COALESCE((SELECT SUM(dp.subtotal) FROM detalle_pedido dp WHERE dp.pedido_id = ?), 0) WHERE id_pedido = ?', [$pedidoId, $pedidoId]);
     }
 
     /** Carrito con detalle y disponibilidad actual de cada producto. */
     public static function carrito(int $clienteId): array
     {
         $id = DB::table('pedido as p')->where('p.cliente_id', $clienteId)->where('p.estado', 'pendiente')->where('p.origen', 'inmediato')
-            ->whereNotExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id'))
-            ->orderBy('p.id')->value('p.id');
+            ->whereNotExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id_pedido'))
+            ->orderBy('p.id_pedido')->value('p.id_pedido');
         if (! $id) {
             return ['id' => null, 'detalles' => [], 'subtotal' => 0, 'tarifa_envio' => EnvioServicio::tarifa()];
         }
-        $pedido = DB::table('pedido')->where('id', $id)->first(['id', 'numero', 'subtotal']);
+        $pedido = DB::table('pedido')->where('id_pedido', $id)->first(['id_pedido as id', 'numero', 'subtotal']);
         $detalles = DB::table('detalle_pedido as dp')
-            ->join('producto as pr', 'pr.id', '=', 'dp.producto_id')
-            ->join('categoria as c', 'c.id', '=', 'pr.categoria_id')
+            ->join('producto as pr', 'pr.id_producto', '=', 'dp.producto_id')
+            ->join('categoria as c', 'c.id_categoria', '=', 'pr.categoria_id')
             ->join('v_disponibilidad_producto as d', 'd.producto_id', '=', 'dp.producto_id')
             ->where('dp.pedido_id', $id)->orderBy('pr.nombre')
             ->get(['dp.producto_id', 'pr.nombre', 'pr.imagen', 'pr.presentacion', 'pr.unidad_medida', 'pr.estado', 'c.nombre as categoria',
@@ -100,8 +100,8 @@ class PedidoServicio
 
     public static function validarProductoVendible(int $productoId): object
     {
-        $p = DB::table('producto as p')->join('v_disponibilidad_producto as d', 'd.producto_id', '=', 'p.id')
-            ->where('p.id', $productoId)->first(['p.id', 'p.nombre', 'p.estado', 'p.modalidad_venta', 'p.precio_venta', 'p.unidad_medida', 'd.stock_disponible']);
+        $p = DB::table('producto as p')->join('v_disponibilidad_producto as d', 'd.producto_id', '=', 'p.id_producto')
+            ->where('p.id_producto', $productoId)->first(['p.id_producto as id', 'p.nombre', 'p.estado', 'p.modalidad_venta', 'p.precio_venta', 'p.unidad_medida', 'd.stock_disponible']);
         if (! $p || $p->estado !== 'activo') {
             throw new ErrorNegocio('El producto no existe o ya no está a la venta.');
         }
@@ -124,7 +124,7 @@ class PedidoServicio
         $faltantes = [];
         $filas = DB::select(
             'SELECT pr.nombre, dp.cantidad, d.stock_disponible, pr.unidad_medida, pr.estado
-               FROM detalle_pedido dp JOIN producto pr ON pr.id = dp.producto_id
+               FROM detalle_pedido dp JOIN producto pr ON pr.id_producto = dp.producto_id
                JOIN v_disponibilidad_producto d ON d.producto_id = dp.producto_id WHERE dp.pedido_id = ?',
             [$pedidoId]
         );
@@ -152,11 +152,11 @@ class PedidoServicio
             }
             $km = EnvioServicio::distanciaKm((float) $e['latitud'], (float) $e['longitud']);
             $costo = EnvioServicio::costo($km);
-            $direccion = ($e['direccion'] ?? null) ?: DB::table('pedido as p')->join('usuario as u', 'u.id', '=', 'p.cliente_id')->where('p.id', $pedidoId)->value('u.direccion');
+            $direccion = ($e['direccion'] ?? null) ?: DB::table('pedido as p')->join('usuario as u', 'u.id_usuario', '=', 'p.cliente_id')->where('p.id_pedido', $pedidoId)->value('u.direccion');
             if (! $direccion) {
                 throw new ErrorNegocio('Para envío a domicilio indique la dirección de entrega.');
             }
-            DB::table('pedido')->where('id', $pedidoId)->update(['costo_envio' => $costo]);
+            DB::table('pedido')->where('id_pedido', $pedidoId)->update(['costo_envio' => $costo]);
             $entrega += ['direccion' => $direccion, 'latitud' => $e['latitud'], 'longitud' => $e['longitud'], 'distancia_km' => $km];
         }
 
@@ -168,11 +168,11 @@ class PedidoServicio
     public static function revisarPagoCompleto(int $pedidoId, ?int $gestor = null): bool
     {
         $f = DB::selectOne('SELECT p.estado, p.cliente_id, p.numero, s.saldo_pendiente FROM pedido p
-                              JOIN v_saldo_pedido s ON s.pedido_id = p.id WHERE p.id = ?', [$pedidoId]);
+                              JOIN v_saldo_pedido s ON s.pedido_id = p.id_pedido WHERE p.id_pedido = ?', [$pedidoId]);
         if (! $f || (float) $f->saldo_pendiente > 0.004 || $f->estado !== 'pendiente') {
             return false;
         }
-        DB::update('UPDATE pedido SET estado = \'confirmado\', gestionado_por = COALESCE(gestionado_por, ?) WHERE id = ?', [$gestor, $pedidoId]);
+        DB::update('UPDATE pedido SET estado = \'confirmado\', personal_id = COALESCE(personal_id, ?) WHERE id_pedido = ?', [$gestor, $pedidoId]);
         NotificacionServicio::notificar((int) $f->cliente_id, 'pedido_confirmado',
             "Tu pedido {$f->numero} fue CONFIRMADO: el pago está completo. Te avisaremos la fecha y hora de entrega.", $pedidoId);
         // El plan de pagos (si existe) queda pagado
@@ -202,11 +202,11 @@ class PedidoServicio
         if ($p->estado !== $esperado) {
             throw new ErrorNegocio("El pedido {$p->numero} está ".self::etiqueta($p->estado).'; solo puede pasar a '.self::etiqueta($nuevo).' desde '.self::etiqueta($esperado ?? '-').'.');
         }
-        DB::table('pedido')->where('id', $p->id)->update(['gestionado_por' => $gestor->id]);
+        DB::table('pedido')->where('id_pedido', $p->id)->update(['personal_id' => $gestor->id]);
         $extra = '';
         switch ($nuevo) {
             case 'confirmado':
-                DB::table('pedido')->where('id', $p->id)->update(['estado' => 'confirmado']);
+                DB::table('pedido')->where('id_pedido', $p->id)->update(['estado' => 'confirmado']);
                 NotificacionServicio::notificar($p->cliente_id, 'pedido_confirmado', "Tu pedido {$p->numero} fue CONFIRMADO por FEDER.", $p->id);
                 $saldo = (float) DB::table('v_saldo_pedido')->where('pedido_id', $p->id)->value('saldo_pendiente');
                 $extra = $saldo > 0 ? ' Atención: aún tiene saldo pendiente de Bs. '.number_format($saldo, 2).' (pago contra entrega).' : '';
@@ -217,15 +217,15 @@ class PedidoServicio
                     throw new ErrorNegocio('Indique la fecha y hora aproximada de la entrega.');
                 }
                 DB::select('SELECT fn_confirmar_reservas(?, ?)', [$p->id, $gestor->id]);
-                DB::table('pedido')->where('id', $p->id)->update(['estado' => 'listo_entrega']);
+                DB::table('pedido')->where('id_pedido', $p->id)->update(['estado' => 'listo_entrega']);
                 DB::table('entrega')->where('pedido_id', $p->id)->update(['fecha_programada' => $fechaProgramada]);
                 self::notificarProgramacion($p, $fechaProgramada);
                 $extra = ' Se registraron las salidas de inventario y se notificó al cliente.';
                 break;
             case 'entregado':
-                DB::table('pedido')->where('id', $p->id)->update(['estado' => 'entregado']);
+                DB::table('pedido')->where('id_pedido', $p->id)->update(['estado' => 'entregado']);
                 DB::update("UPDATE entrega SET estado = 'entregada', fecha_entrega = COALESCE(fecha_entrega, now()),
-                            despachado_por = COALESCE(despachado_por, ?) WHERE pedido_id = ?", [$gestor->id, $p->id]);
+                            personal_id = COALESCE(personal_id, ?) WHERE pedido_id = ?", [$gestor->id, $p->id]);
                 NotificacionServicio::notificar($p->cliente_id, 'pedido_entregado', "Tu pedido {$p->numero} fue ENTREGADO. ¡Gracias por tu compra!", $p->id);
                 break;
         }
@@ -240,7 +240,7 @@ class PedidoServicio
             throw new ErrorNegocio("El pedido está ".self::etiqueta($p->estado).' y no puede cancelarse'.($usuario->esStaff() ? '.' : '; comuníquese con FEDER.'));
         }
         DB::select('SELECT fn_liberar_reservas(?)', [$p->id]);
-        DB::table('pedido')->where('id', $p->id)->update(['estado' => 'cancelado']);
+        DB::table('pedido')->where('id_pedido', $p->id)->update(['estado' => 'cancelado']);
         $devuelto = self::reembolsarStripe($p->id);
         DB::table('pago')->where('pedido_id', $p->id)->where('estado', 'pendiente')->update(['estado' => 'anulado']);
         DB::table('plan_pago')->where('pedido_id', $p->id)->update(['estado' => 'cancelado']);
@@ -256,14 +256,14 @@ class PedidoServicio
     /** Al cancelar: los cobros con Stripe se reembolsan y los 3D Secure a medias se cancelan. Devuelve el monto devuelto. */
     private static function reembolsarStripe(int $pedidoId): float
     {
-        $pagos = DB::table('pago')->where('pedido_id', $pedidoId)->where('pasarela', 'stripe')->whereIn('estado', ['pagado', 'pendiente'])->get();
+        $pagos = DB::table('pago')->where('pedido_id', $pedidoId)->where('pasarela', 'stripe')->whereIn('estado', ['pagado', 'pendiente'])->get(['*', 'id_pago as id']);
         if ($pagos->isEmpty() || ! StripeServicio::activo()) {
             return 0;
         }
         // Primero se registra en la BD y AL FINAL se llama a Stripe: si Stripe falla, la transacción
         // se deshace; si la BD fallara, Stripe nunca habría devuelto el dinero (no quedan descuadres).
         $pagados = $pagos->where('estado', 'pagado');
-        DB::table('pago')->whereIn('id', $pagados->pluck('id'))->update(['estado' => 'devuelto']);
+        DB::table('pago')->whereIn('id_pago', $pagados->pluck('id_pago'))->update(['estado' => 'devuelto']);
         $stripe = app(StripeServicio::class);
         foreach ($pagos->where('estado', 'pendiente') as $pago) {
             $stripe->cancelar($pago->codigo_transaccion);
@@ -278,7 +278,7 @@ class PedidoServicio
     /** Avisa al cliente cuándo (fecha y hora aproximada) se entrega o puede recoger su pedido. */
     public static function notificarProgramacion(Pedido $p, string $fechaProgramada, bool $reprogramada = false): void
     {
-        $en = DB::table('entrega')->where('pedido_id', $p->id)->first();
+        $en = DB::table('entrega')->where('pedido_id', $p->id)->first(['*', 'id_entrega as id']);
         $cuando = self::fechaAmigable($fechaProgramada);
         $texto = $en->tipo === 'recojo'
             ? "Tu pedido {$p->numero} estará listo para recoger en las oficinas de FEDER desde el {$cuando}."

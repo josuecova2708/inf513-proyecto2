@@ -39,15 +39,15 @@ class MantenimientoServicio
             SELECT DISTINCT pr.producto_id, 'vencimiento',
                    format('El lote %s de %s vence el %s', l.codigo, p.nombre, to_char(l.fecha_vencimiento, 'DD/MM/YYYY'))
               FROM lote l
-              JOIN produccion pr ON pr.id = l.produccion_id
-              JOIN producto p ON p.id = pr.producto_id
+              JOIN produccion pr ON pr.id_produccion = l.produccion_id
+              JOIN producto p ON p.id_producto = pr.producto_id
              WHERE l.estado = 'disponible' AND l.stock_disponible > 0
                AND l.fecha_vencimiento BETWEEN CURRENT_DATE AND CURRENT_DATE + 7
                AND NOT EXISTS (SELECT 1 FROM alerta_inventario a
                                 WHERE a.producto_id = pr.producto_id AND a.tipo = 'vencimiento' AND a.estado = 'activa')");
 
         // 4. Stock bajo el mínimo
-        DB::select('SELECT fn_revisar_stock_minimo(id) FROM producto WHERE estado = \'activo\'');
+        DB::select('SELECT fn_revisar_stock_minimo(id_producto) FROM producto WHERE estado = \'activo\'');
 
         // 5. Cuotas vencidas de planes de pago
         $cuotas = DB::update("UPDATE cuota_pago SET estado = 'vencida' WHERE estado = 'pendiente' AND fecha_vencimiento < CURRENT_DATE");

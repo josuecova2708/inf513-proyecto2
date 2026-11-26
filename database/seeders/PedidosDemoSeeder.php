@@ -17,11 +17,11 @@ class PedidosDemoSeeder extends Seeder
     public function run(): void
     {
         mt_srand(28);
-        $clientes = DB::table('usuario')->where('email', 'like', 'cliente.%')->pluck('id')->all();
-        $personal = DB::table('usuario')->where('email', 'feder.personal@example.com')->value('id');
-        $metodos = DB::table('metodo_pago')->pluck('id', 'nombre');
+        $clientes = DB::table('usuario')->where('email', 'like', 'cliente.%')->pluck('id_usuario')->all();
+        $personal = DB::table('usuario')->where('email', 'feder.personal@example.com')->value('id_usuario');
+        $metodos = DB::table('metodo_pago')->pluck('id_metodo_pago', 'nombre');
         $productos = DB::table('producto')->whereIn('modalidad_venta', ['inmediata', 'ambas'])
-            ->where('nombre', '!=', 'Tomate perita')->get(['id', 'precio_venta'])->all();
+            ->where('nombre', '!=', 'Tomate perita')->get(['id_producto as id', 'precio_venta'])->all();
 
         for ($i = 0; $i < 32; $i++) {
             $fecha = Carbon::now()->subDays(45 - $i - mt_rand(0, 1))->setTime(mt_rand(8, 19), mt_rand(0, 59));
@@ -32,21 +32,21 @@ class PedidosDemoSeeder extends Seeder
             $pedidoId = $this->crearPedido($cliente, $items, $envio, $fecha);
             DB::select('SELECT fn_reservar_pedido(?, ?)', [$pedidoId, 1440]);
 
-            $total = (float) DB::table('pedido')->where('id', $pedidoId)->value('total');
+            $total = (float) DB::table('pedido')->where('id_pedido', $pedidoId)->value('total');
             $metodo = ['QR', 'Efectivo', 'Tarjeta', 'Transferencia'][mt_rand(0, 3)];
             DB::table('pago')->insert([
                 'pedido_id' => $pedidoId, 'metodo_pago_id' => $metodos[$metodo], 'monto' => $total, 'fecha' => $fecha->copy()->addHours(1),
                 'estado' => 'pagado', 'referencia' => 'Pago demo', 'codigo_transaccion' => 'TX-DEMO-'.str_pad((string) $pedidoId, 6, '0', STR_PAD_LEFT),
-                'registrado_por' => $personal,
+                'usuario_id' => $personal,
             ]);
 
             // Los más antiguos ya se entregaron; los últimos quedan en distintos estados del flujo
             $estadoFinal = $i < 26 ? 'entregado' : ['confirmado', 'listo_entrega', 'listo_entrega', 'entregado', 'confirmado', 'confirmado'][$i - 26];
             if ($estadoFinal === 'confirmado') {
-                DB::table('pedido')->where('id', $pedidoId)->update(['estado' => 'confirmado', 'gestionado_por' => $personal]);
+                DB::table('pedido')->where('id_pedido', $pedidoId)->update(['estado' => 'confirmado', 'personal_id' => $personal]);
             } else {
                 DB::select('SELECT fn_confirmar_reservas(?, ?)', [$pedidoId, $personal]);
-                DB::table('pedido')->where('id', $pedidoId)->update(['estado' => $estadoFinal, 'gestionado_por' => $personal]);
+                DB::table('pedido')->where('id_pedido', $pedidoId)->update(['estado' => $estadoFinal, 'personal_id' => $personal]);
             }
             if ($estadoFinal === 'listo_entrega') {
                 // Entrega programada por el personal para los próximos días
@@ -57,27 +57,27 @@ class PedidosDemoSeeder extends Seeder
             if ($estadoFinal === 'entregado') {
                 DB::table('entrega')->where('pedido_id', $pedidoId)->update([
                     'estado' => 'entregada', 'fecha_programada' => $fecha->copy()->addDays(1)->setTime(15, 0),
-                    'fecha_entrega' => $fecha->copy()->addDays(1)->setTime(15, mt_rand(0, 50)), 'despachado_por' => $personal,
+                    'fecha_entrega' => $fecha->copy()->addDays(1)->setTime(15, mt_rand(0, 50)), 'personal_id' => $personal,
                     'receptor' => 'Titular del pedido',
                 ]);
             }
         }
 
         // Un pedido pendiente de pago (para probar el flujo de pago) y un plan de pagos en curso
-        $ana = DB::table('usuario')->where('email', 'cliente.ana@example.com')->value('id');
-        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->first(['id', 'precio_venta']);
-        $cafe = DB::table('producto')->where('nombre', 'Café de Samaipata molido')->first(['id', 'precio_venta']);
+        $ana = DB::table('usuario')->where('email', 'cliente.ana@example.com')->value('id_usuario');
+        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->first(['id_producto as id', 'precio_venta']);
+        $cafe = DB::table('producto')->where('nombre', 'Café de Samaipata molido')->first(['id_producto as id', 'precio_venta']);
 
         $pendiente = $this->crearPedido($ana, [[$miel, 2]], false, Carbon::now()->subHours(3));
         DB::select('SELECT fn_reservar_pedido(?, ?)', [$pendiente, 1440 * 3]);
 
         $conPlan = $this->crearPedido($ana, [[$miel, 3], [$cafe, 4]], true, Carbon::now()->subDays(20));
         DB::select('SELECT fn_reservar_pedido(?, ?)', [$conPlan, 1440 * 30]);
-        $total = (float) DB::table('pedido')->where('id', $conPlan)->value('total');
+        $total = (float) DB::table('pedido')->where('id_pedido', $conPlan)->value('total');
         $planId = DB::table('plan_pago')->insertGetId([
             'pedido_id' => $conPlan, 'usuario_id' => $ana, 'nro_cuotas' => 3, 'frecuencia' => 'mensual',
             'monto_total' => $total, 'cuota_inicial' => 0, 'fecha' => Carbon::now()->subDays(20),
-        ]);
+        ], 'id_plan_pago');
         $montoCuota = round($total / 3, 2);
         for ($n = 1; $n <= 3; $n++) {
             $monto = $n < 3 ? $montoCuota : round($total - $montoCuota * 2, 2);
@@ -85,7 +85,7 @@ class PedidosDemoSeeder extends Seeder
                 'plan_pago_id' => $planId, 'numero' => $n, 'monto' => $monto,
                 'fecha_vencimiento' => Carbon::now()->subDays(20)->addMonths($n - 1)->toDateString(),
                 'estado' => $n === 1 ? 'pagada' : 'pendiente', 'fecha_pago' => $n === 1 ? Carbon::now()->subDays(20) : null,
-            ]);
+            ], 'id_cuota_pago');
             if ($n === 1) {
                 DB::table('pago')->insert([
                     'pedido_id' => $conPlan, 'metodo_pago_id' => $metodos['Tarjeta'], 'monto' => $monto,
@@ -96,12 +96,12 @@ class PedidosDemoSeeder extends Seeder
         }
 
         // Encargo de producto por pedido anticipado
-        $carlos = DB::table('usuario')->where('email', 'cliente.carlos@example.com')->value('id');
-        $papaya = DB::table('producto')->where('nombre', 'Papaya')->first(['id', 'precio_venta']);
+        $carlos = DB::table('usuario')->where('email', 'cliente.carlos@example.com')->value('id_usuario');
+        $papaya = DB::table('producto')->where('nombre', 'Papaya')->first(['id_producto as id', 'precio_venta']);
         $encargo = DB::table('encargo')->insertGetId([
             'cliente_id' => $carlos, 'fecha_requerida' => now()->addDays(25)->toDateString(),
             'estado' => 'solicitado', 'observacion' => 'Para evento familiar',
-        ]);
+        ], 'id_encargo');
         DB::table('detalle_encargo')->insert([
             'encargo_id' => $encargo, 'producto_id' => $papaya->id, 'cantidad' => 20, 'precio_estimado' => $papaya->precio_venta,
         ]);
@@ -113,7 +113,7 @@ class PedidosDemoSeeder extends Seeder
              'mensaje' => 'Tu pedido fue registrado. Recuerda completar el pago para confirmarlo.', 'fecha_envio' => Carbon::now()->subHours(3), 'leida' => false],
         ]);
 
-        DB::select('SELECT fn_revisar_stock_minimo(id) FROM producto');
+        DB::select('SELECT fn_revisar_stock_minimo(id_producto) FROM producto');
     }
 
     /** @return array<int, array{0: object, 1: int}> */
@@ -126,7 +126,7 @@ class PedidosDemoSeeder extends Seeder
 
     private function crearPedido(int $cliente, array $items, bool $envio, Carbon $fecha): int
     {
-        $id = (int) DB::selectOne("SELECT nextval(pg_get_serial_sequence('pedido','id')) AS id")->id;
+        $id = (int) DB::selectOne("SELECT nextval(pg_get_serial_sequence('pedido', 'id_pedido')) AS id")->id;
         $subtotal = array_sum(array_map(fn ($it) => $it[0]->precio_venta * $it[1], $items));
         // Envíos: un punto aleatorio de Santa Cruz (hasta ~6 km de FEDER) con su costo por distancia
         $lat = $lng = $km = null;
@@ -139,7 +139,7 @@ class PedidosDemoSeeder extends Seeder
         }
 
         DB::table('pedido')->insert([
-            'id' => $id, 'numero' => 'PED-'.str_pad((string) $id, 6, '0', STR_PAD_LEFT), 'cliente_id' => $cliente,
+            'id_pedido' => $id, 'numero' => 'PED-'.str_pad((string) $id, 6, '0', STR_PAD_LEFT), 'cliente_id' => $cliente,
             'origen' => 'inmediato', 'fecha' => $fecha, 'estado' => 'pendiente', 'subtotal' => $subtotal, 'costo_envio' => $costoEnvio,
         ]);
         foreach ($items as [$producto, $cantidad]) {
@@ -147,7 +147,7 @@ class PedidosDemoSeeder extends Seeder
                 'pedido_id' => $id, 'producto_id' => $producto->id, 'cantidad' => $cantidad, 'precio_unitario' => $producto->precio_venta,
             ]);
         }
-        $direccion = DB::table('usuario')->where('id', $cliente)->value('direccion');
+        $direccion = DB::table('usuario')->where('id_usuario', $cliente)->value('direccion');
         DB::table('entrega')->insert([
             'pedido_id' => $id, 'tipo' => $envio ? 'envio' : 'recojo', 'direccion' => $envio ? $direccion : null,
             'fecha_preferida' => $fecha->copy()->addDays(1)->toDateString(),

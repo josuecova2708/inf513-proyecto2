@@ -20,7 +20,7 @@ class PagoServicio
      */
     public function procesar(object $pedido, Usuario $usuario, int $metodoId, float $monto, ?int $metodoUsuarioId, ?string $referencia, ?int $cuotaId = null): array
     {
-        $metodo = DB::table('metodo_pago')->where('id', $metodoId)->where('habilitado', true)->first()
+        $metodo = DB::table('metodo_pago')->where('id_metodo_pago', $metodoId)->where('habilitado', true)->first(['*', 'id_metodo_pago as id'])
             ?? throw new ErrorNegocio('El método de pago no está habilitado.');
 
         $tarjeta = null;
@@ -28,7 +28,7 @@ class PagoServicio
             if (! $metodoUsuarioId) {
                 throw new ErrorNegocio('Seleccione una de sus tarjetas registradas.');
             }
-            $tarjeta = DB::table('metodo_pago_usuario')->where('id', $metodoUsuarioId)->where('estado', 'activo')->first();
+            $tarjeta = DB::table('metodo_pago_usuario')->where('id_metodo_pago_usuario', $metodoUsuarioId)->where('estado', 'activo')->first(['*', 'id_metodo_pago_usuario as id']);
             if (! $tarjeta || $tarjeta->usuario_id !== $pedido->cliente_id || $tarjeta->metodo_pago_id !== $metodo->id) {
                 throw new ErrorNegocio('La tarjeta seleccionada no es válida.');
             }
@@ -45,9 +45,9 @@ class PagoServicio
         $pagoId = DB::table('pago')->insertGetId([
             'pedido_id' => $pedido->id, 'metodo_pago_id' => $metodo->id, 'monto' => $monto, 'fecha' => now(),
             'estado' => $r->estado, 'referencia' => $referencia, 'codigo_transaccion' => $r->codigoTransaccion,
-            'metodo_pago_usuario_id' => $tarjeta?->id, 'cuota_pago_id' => $cuotaId, 'registrado_por' => $usuario->id,
+            'metodo_pago_usuario_id' => $tarjeta?->id, 'cuota_pago_id' => $cuotaId, 'usuario_id' => $usuario->id,
             'pasarela' => $r->pasarela,
-        ]);
+        ], 'id_pago');
 
         // Con 3D Secure pendiente todavía no hay resultado: se resuelve en confirmarStripe()
         if (! $r->requiereAccion()) {
@@ -65,8 +65,8 @@ class PagoServicio
      */
     public function confirmarStripe(int $pagoId, Usuario $usuario): array
     {
-        $pago = DB::table('pago as pa')->join('pedido as pe', 'pe.id', '=', 'pa.pedido_id')
-            ->where('pa.id', $pagoId)->lockForUpdate()->first(['pa.*', 'pe.cliente_id'])
+        $pago = DB::table('pago as pa')->join('pedido as pe', 'pe.id_pedido', '=', 'pa.pedido_id')
+            ->where('pa.id_pago', $pagoId)->lockForUpdate()->first(['pa.*', 'pa.id_pago as id', 'pe.cliente_id'])
             ?? throw new ErrorNegocio('El pago no existe.', 404);
         if (! $usuario->esStaff() && $pago->cliente_id !== $usuario->id) {
             throw new ErrorNegocio('El pago no le pertenece.', 403);
@@ -78,7 +78,7 @@ class PagoServicio
         $stripe = app(StripeServicio::class);
         $pi = $stripe->consultar($pago->codigo_transaccion);
         if ($pi->status === 'succeeded') {
-            DB::table('pago')->where('id', $pagoId)->update(['estado' => 'pagado']);
+            DB::table('pago')->where('id_pago', $pagoId)->update(['estado' => 'pagado']);
             $this->despuesDePago($pagoId, 'pagado', $usuario->esStaff() ? $usuario->id : null);
 
             return ['pagado', 'Pago aprobado (verificado con 3D Secure).'];
@@ -87,7 +87,7 @@ class PagoServicio
             return ['pendiente', 'El pago todavía no se completó.'];
         }
         $stripe->cancelar($pi->id);
-        DB::table('pago')->where('id', $pagoId)->update(['estado' => 'rechazado']);
+        DB::table('pago')->where('id_pago', $pagoId)->update(['estado' => 'rechazado']);
         $this->despuesDePago($pagoId, 'rechazado', null);
 
         return ['rechazado', 'No se pudo completar la verificación 3D Secure: el pago fue rechazado.'];
@@ -99,15 +99,15 @@ class PagoServicio
      */
     public function sincronizarPendientesStripe(int $pedidoId): void
     {
-        $pendientes = DB::table('pago')->where('pedido_id', $pedidoId)->where('pasarela', 'stripe')->where('estado', 'pendiente')->get(['id', 'codigo_transaccion']);
+        $pendientes = DB::table('pago')->where('pedido_id', $pedidoId)->where('pasarela', 'stripe')->where('estado', 'pendiente')->get(['id_pago as id', 'codigo_transaccion']);
         foreach ($pendientes as $p) {
             $pi = app(StripeServicio::class)->consultar($p->codigo_transaccion);
             if ($pi->status === 'succeeded') {
-                DB::table('pago')->where('id', $p->id)->update(['estado' => 'pagado']);
+                DB::table('pago')->where('id_pago', $p->id)->update(['estado' => 'pagado']);
                 $this->despuesDePago($p->id, 'pagado', null);
             } else {
                 app(StripeServicio::class)->cancelar($pi->id);
-                DB::table('pago')->where('id', $p->id)->update(['estado' => 'anulado']);
+                DB::table('pago')->where('id_pago', $p->id)->update(['estado' => 'anulado']);
             }
         }
     }
@@ -115,8 +115,8 @@ class PagoServicio
     /** Efectos de un pago al quedar pagado/rechazado (también se usa al verificar pagos pendientes). */
     public function despuesDePago(int $pagoId, string $estado, ?int $gestor): void
     {
-        $pago = DB::table('pago as pa')->join('pedido as pe', 'pe.id', '=', 'pa.pedido_id')
-            ->where('pa.id', $pagoId)->first(['pa.*', 'pe.numero', 'pe.cliente_id', 'pe.estado as estado_pedido']);
+        $pago = DB::table('pago as pa')->join('pedido as pe', 'pe.id_pedido', '=', 'pa.pedido_id')
+            ->where('pa.id_pago', $pagoId)->first(['pa.*', 'pa.id_pago as id', 'pe.numero', 'pe.cliente_id', 'pe.estado as estado_pedido']);
 
         if ($estado === 'rechazado') {
             NotificacionServicio::notificar($pago->cliente_id, 'pago_rechazado',
@@ -137,15 +137,15 @@ class PagoServicio
             "Recibimos tu pago de Bs. ".number_format($pago->monto, 2)." del pedido {$pago->numero}.", $pago->pedido_id);
 
         if ($pago->cuota_pago_id) {
-            DB::table('cuota_pago')->where('id', $pago->cuota_pago_id)->update(['estado' => 'pagada', 'fecha_pago' => now()]);
-            $plan = DB::table('cuota_pago')->where('id', $pago->cuota_pago_id)->value('plan_pago_id');
+            DB::table('cuota_pago')->where('id_cuota_pago', $pago->cuota_pago_id)->update(['estado' => 'pagada', 'fecha_pago' => now()]);
+            $plan = DB::table('cuota_pago')->where('id_cuota_pago', $pago->cuota_pago_id)->value('plan_pago_id');
             $pendientes = DB::table('cuota_pago')->where('plan_pago_id', $plan)->where('estado', '!=', 'pagada')->count();
             if ($pendientes === 0) {
-                DB::table('plan_pago')->where('id', $plan)->update(['estado' => 'pagado']);
+                DB::table('plan_pago')->where('id_plan_pago', $plan)->update(['estado' => 'pagado']);
             }
             // Venta a crédito: con la primera cuota pagada el pedido queda confirmado
             if ($pago->estado_pedido === 'pendiente') {
-                DB::update('UPDATE pedido SET estado = \'confirmado\', gestionado_por = COALESCE(gestionado_por, ?) WHERE id = ?', [$gestor, $pago->pedido_id]);
+                DB::update('UPDATE pedido SET estado = \'confirmado\', personal_id = COALESCE(personal_id, ?) WHERE id_pedido = ?', [$gestor, $pago->pedido_id]);
                 NotificacionServicio::notificar($pago->cliente_id, 'pedido_confirmado',
                     "Tu pedido {$pago->numero} fue CONFIRMADO con tu plan de pagos. Recuerda pagar las siguientes cuotas a tiempo.", $pago->pedido_id);
             }

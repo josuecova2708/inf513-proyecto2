@@ -28,11 +28,11 @@ class UsuarioController extends Controller
     private function reglas(?int $id = null): array
     {
         return [
-            'rol_id' => ['required', 'integer', 'exists:rol,id'],
+            'rol_id' => ['required', 'integer', 'exists:rol,id_rol'],
             'nombre' => ['required', 'string', 'min:2', 'max:80', 'regex:/^[\pL\s\'.-]+$/u'],
             'apellido' => ['required', 'string', 'min:2', 'max:80', 'regex:/^[\pL\s\'.-]+$/u'],
-            'ci' => ['nullable', 'string', 'regex:/^\d{5,10}(-?[A-Za-z0-9]{1,3})?$/', Rule::unique('usuario', 'ci')->ignore($id)],
-            'email' => ['required', 'email', 'max:120', Rule::unique('usuario', 'email')->ignore($id)],
+            'ci' => ['nullable', 'string', 'regex:/^\d{5,10}(-?[A-Za-z0-9]{1,3})?$/', Rule::unique('usuario', 'ci')->ignore($id, 'id_usuario')],
+            'email' => ['required', 'email', 'max:120', Rule::unique('usuario', 'email')->ignore($id, 'id_usuario')],
             'telefono' => ['nullable', 'regex:/^[67]\d{7}$/'],
             'direccion' => ['nullable', 'string', 'max:200'],
             'estado' => ['required', Rule::in(['activo', 'inactivo'])],
@@ -47,14 +47,14 @@ class UsuarioController extends Controller
             'rol_id' => ['nullable', 'integer'],
             'estado' => ['nullable', Rule::in(['activo', 'inactivo'])],
         ]);
-        $q = DB::table('usuario as u')->join('rol as r', 'r.id', '=', 'u.rol_id')
-            ->leftJoin('emprendimiento as e', 'e.usuario_id', '=', 'u.id')
+        $q = DB::table('usuario as u')->join('rol as r', 'r.id_rol', '=', 'u.rol_id')
+            ->leftJoin('emprendimiento as e', 'e.usuario_id', '=', 'u.id_usuario')
             ->when($f['q'] ?? null, fn ($w, $t) => $w->where(fn ($x) => $x->whereRaw("u.nombre || ' ' || u.apellido ILIKE ?", [$this->like($t)])
                 ->orWhere('u.email', 'ilike', $this->like($t))->orWhere('u.ci', 'ilike', $this->like($t))))
             ->when($f['rol_id'] ?? null, fn ($w, $r) => $w->where('u.rol_id', $r))
             ->when($f['estado'] ?? null, fn ($w, $e) => $w->where('u.estado', $e))
-            ->orderBy('u.id')
-            ->select('u.id', 'u.rol_id', 'r.nombre as rol', 'u.nombre', 'u.apellido', 'u.ci', 'u.email', 'u.telefono',
+            ->orderBy('u.id_usuario')
+            ->select('u.id_usuario as id', 'u.rol_id', 'r.nombre as rol', 'u.nombre', 'u.apellido', 'u.ci', 'u.email', 'u.telefono',
                 'u.direccion', 'u.estado', 'u.fecha_registro', 'e.nombre as emprendimiento');
 
         return $this->paginado($q->paginate($this->porPagina($request)));

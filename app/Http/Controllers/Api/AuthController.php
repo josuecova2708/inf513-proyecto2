@@ -55,7 +55,7 @@ class AuthController extends Controller
 
         RateLimiter::clear($clave);
         if (Hash::needsRehash($usuario->password_hash)) {
-            DB::table('usuario')->where('id', $usuario->id)->update(['password_hash' => Hash::make($datos['password'])]);
+            DB::table('usuario')->where('id_usuario', $usuario->id)->update(['password_hash' => Hash::make($datos['password'])]);
         }
 
         $token = $usuario->createToken('web')->plainTextToken;
@@ -86,7 +86,7 @@ class AuthController extends Controller
 
         $usuario = new Usuario(collect($datos)->except('password')->all());
         $usuario->email = Str::lower($datos['email']);
-        $usuario->rol_id = Rol::where('nombre', Usuario::CLIENTE)->value('id');
+        $usuario->rol_id = Rol::where('nombre', Usuario::CLIENTE)->value('id_rol');
         $usuario->password_hash = Hash::make($datos['password']);
         $usuario->save();
         $usuario->load('rol');
@@ -119,7 +119,7 @@ class AuthController extends Controller
             'apellido' => ['required', 'string', 'min:2', 'max:80', 'regex:/^[\pL\s\'.-]+$/u'],
             'telefono' => ['nullable', 'regex:/^[67]\d{7}$/'],
             'direccion' => ['nullable', 'string', 'max:200'],
-            'email' => ['required', 'email', 'max:120', Rule::unique('usuario', 'email')->ignore($usuario->id)],
+            'email' => ['required', 'email', 'max:120', Rule::unique('usuario', 'email')->ignore($usuario->id, 'id_usuario')],
             'password_actual' => ['nullable', 'required_with:password', 'string'],
             'password' => ['nullable', 'string', 'min:8', 'max:100', 'regex:/[A-Za-z]/', 'regex:/\d/', 'confirmed'],
         ], [

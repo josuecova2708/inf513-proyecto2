@@ -25,13 +25,13 @@ class PlanPagoController extends Controller
         $request->validate(['estado' => ['nullable', Rule::in(['vigente', 'pagado', 'cancelado'])]]);
         $u = $request->user();
         $planes = DB::table('plan_pago as pl')
-            ->join('pedido as pe', 'pe.id', '=', 'pl.pedido_id')
-            ->join('usuario as u', 'u.id', '=', 'pl.usuario_id')
+            ->join('pedido as pe', 'pe.id_pedido', '=', 'pl.pedido_id')
+            ->join('usuario as u', 'u.id_usuario', '=', 'pl.usuario_id')
             ->when(! $u->esStaff(), fn ($w) => $w->where('pl.usuario_id', $u->id))
             ->when($request->estado, fn ($w, $e) => $w->where('pl.estado', $e))
-            ->orderByRaw("CASE pl.estado WHEN 'vigente' THEN 0 ELSE 1 END")->orderByDesc('pl.id')
-            ->get(['pl.*', 'pe.numero', 'pe.estado as estado_pedido', DB::raw("u.nombre || ' ' || u.apellido AS cliente")]);
-        $cuotas = DB::table('cuota_pago')->whereIn('plan_pago_id', $planes->pluck('id'))->orderBy('numero')->get()->groupBy('plan_pago_id');
+            ->orderByRaw("CASE pl.estado WHEN 'vigente' THEN 0 ELSE 1 END")->orderByDesc('pl.id_plan_pago')
+            ->get(['pl.*', 'pl.id_plan_pago as id', 'pe.numero', 'pe.estado as estado_pedido', DB::raw("u.nombre || ' ' || u.apellido AS cliente")]);
+        $cuotas = DB::table('cuota_pago')->whereIn('plan_pago_id', $planes->pluck('id'))->orderBy('numero')->get(['*', 'id_cuota_pago as id'])->groupBy('plan_pago_id');
         foreach ($planes as $p) {
             $p->cuotas = $cuotas[$p->id] ?? [];
             $p->pagado = collect($p->cuotas)->where('estado', 'pagada')->sum('monto');
@@ -72,7 +72,7 @@ class PlanPagoController extends Controller
             $planId = DB::table('plan_pago')->insertGetId([
                 'pedido_id' => $id, 'usuario_id' => $p->cliente_id, 'nro_cuotas' => $d['nro_cuotas'], 'frecuencia' => $d['frecuencia'],
                 'monto_total' => $saldo, 'cuota_inicial' => $inicial, 'estado' => 'vigente', 'fecha' => now(),
-            ]);
+            ], 'id_plan_pago');
             // Cuotas: la 1ra vence hoy (incluye la cuota inicial si la hay); el resto se reparte en partes iguales
             $n = (int) $d['nro_cuotas'];
             $resto = $saldo - $inicial;
@@ -94,11 +94,11 @@ class PlanPagoController extends Controller
             // La reserva de stock se mantiene durante el plan
             $ultima = DB::table('cuota_pago')->where('plan_pago_id', $planId)->max('fecha_vencimiento');
             DB::update("UPDATE reserva_lote SET fecha_expiracion = ?::date + interval '3 days'
-                         WHERE estado = 'reservada' AND detalle_pedido_id IN (SELECT id FROM detalle_pedido WHERE pedido_id = ?)", [$ultima, $id]);
+                         WHERE estado = 'reservada' AND detalle_pedido_id IN (SELECT id_detalle_pedido FROM detalle_pedido WHERE pedido_id = ?)", [$ultima, $id]);
             NotificacionServicio::notificar($p->cliente_id, 'pedido_confirmado',
                 "Se creó tu plan de {$n} cuotas para el pedido {$p->numero}. Paga la primera cuota para confirmarlo.", $id);
 
-            return DB::table('plan_pago')->where('id', $planId)->first();
+            return DB::table('plan_pago')->where('id_plan_pago', $planId)->first(['*', 'id_plan_pago as id']);
         });
 
         return $this->mensaje("Plan de pagos creado: {$plan->nro_cuotas} cuotas. Pague la primera cuota para confirmar el pedido.", ['plan' => $plan], 201);
@@ -107,15 +107,15 @@ class PlanPagoController extends Controller
     public function pagarCuota(Request $request, int $id, PagoServicio $servicio): JsonResponse
     {
         $d = $request->validate([
-            'metodo_pago_id' => ['required', 'integer', 'exists:metodo_pago,id'],
+            'metodo_pago_id' => ['required', 'integer', 'exists:metodo_pago,id_metodo_pago'],
             'metodo_pago_usuario_id' => ['nullable', 'integer'],
             'referencia' => ['nullable', 'string', 'max:100'],
         ]);
         $u = $request->user();
 
         [$pagoId, $r] = DB::transaction(function () use ($d, $id, $u, $servicio) {
-            $cuota = DB::table('cuota_pago')->where('id', $id)->lockForUpdate()->first() ?? throw new ErrorNegocio('La cuota no existe.', 404);
-            $plan = DB::table('plan_pago')->where('id', $cuota->plan_pago_id)->first();
+            $cuota = DB::table('cuota_pago')->where('id_cuota_pago', $id)->lockForUpdate()->first(['*', 'id_cuota_pago as id']) ?? throw new ErrorNegocio('La cuota no existe.', 404);
+            $plan = DB::table('plan_pago')->where('id_plan_pago', $cuota->plan_pago_id)->first(['*', 'id_plan_pago as id']);
             $p = PedidoServicio::pedidoPara($plan->pedido_id, $u);
             if ($plan->estado !== 'vigente' || $p->estado === 'cancelado') {
                 throw new ErrorNegocio('El plan de pagos no está vigente.');

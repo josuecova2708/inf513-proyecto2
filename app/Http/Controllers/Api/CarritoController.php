@@ -25,7 +25,7 @@ class CarritoController extends Controller
     public function agregar(Request $request): JsonResponse
     {
         $d = $request->validate([
-            'producto_id' => ['required', 'integer', 'exists:producto,id'],
+            'producto_id' => ['required', 'integer', 'exists:producto,id_producto'],
             'cantidad' => ['required', 'numeric', 'gt:0', 'max:100000'],
         ], ['cantidad.gt' => 'La cantidad debe ser mayor que 0.']);
         $cliente = $request->user()->id;
@@ -112,12 +112,12 @@ class CarritoController extends Controller
 
         $pedidoId = DB::transaction(function () use ($d, $usuario) {
             $carrito = PedidoServicio::carritoId($usuario->id) ?? throw new ErrorNegocio('Su carrito está vacío.');
-            DB::table('pedido')->where('id', $carrito)->update([
+            DB::table('pedido')->where('id_pedido', $carrito)->update([
                 'nit_ci' => $d['nit_ci'] ?? null, 'razon_social' => $d['razon_social'] ?? null, 'fecha' => now(),
             ]);
             PedidoServicio::reservarYEntregar($carrito, $d);
             PedidoServicio::recalcular($carrito);
-            $numero = DB::table('pedido')->where('id', $carrito)->value('numero');
+            $numero = DB::table('pedido')->where('id_pedido', $carrito)->value('numero');
             NotificacionServicio::notificar($usuario->id, 'pedido_confirmado',
                 "Tu pedido {$numero} fue registrado y el stock quedó reservado por 24 horas. Completa el pago para confirmarlo.", $carrito);
             NotificacionServicio::notificarStaff('pedido_confirmado', "Nuevo pedido {$numero} de {$usuario->nombre_completo}.", $carrito);

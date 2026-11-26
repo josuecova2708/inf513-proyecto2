@@ -26,6 +26,4 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
-/docs/ea/.preview/
-/docs/ea/*.png
-/docs/ea/*.svg
+

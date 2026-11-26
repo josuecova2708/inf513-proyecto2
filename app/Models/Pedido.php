@@ -19,7 +19,7 @@ class Pedido extends Modelo
 
     public function gestor(): BelongsTo
     {
-        return $this->belongsTo(Usuario::class, 'gestionado_por');
+        return $this->belongsTo(Usuario::class, 'personal_id');
     }
 
     public function detalles(): HasMany

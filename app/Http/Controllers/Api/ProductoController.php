@@ -16,8 +16,8 @@ class ProductoController extends Controller
     private function reglas(?int $id = null): array
     {
         return [
-            'categoria_id' => ['required', 'integer', 'exists:categoria,id'],
-            'nombre' => ['required', 'string', 'min:3', 'max:120', Rule::unique('producto', 'nombre')->ignore($id)],
+            'categoria_id' => ['required', 'integer', 'exists:categoria,id_categoria'],
+            'nombre' => ['required', 'string', 'min:3', 'max:120', Rule::unique('producto', 'nombre')->ignore($id, 'id_producto')],
             'descripcion' => ['nullable', 'string', 'max:2000'],
             'presentacion' => ['nullable', 'string', 'max:80'],
             'unidad_medida' => ['required', 'string', 'max:20'],
@@ -46,13 +46,13 @@ class ProductoController extends Controller
             'estado' => ['nullable', Rule::in(['activo', 'inactivo'])],
         ]);
         $q = DB::table('producto as p')
-            ->join('categoria as c', 'c.id', '=', 'p.categoria_id')
-            ->join('v_disponibilidad_producto as d', 'd.producto_id', '=', 'p.id')
+            ->join('categoria as c', 'c.id_categoria', '=', 'p.categoria_id')
+            ->join('v_disponibilidad_producto as d', 'd.producto_id', '=', 'p.id_producto')
             ->when($f['q'] ?? null, fn ($w, $t) => $w->where('p.nombre', 'ilike', $this->like($t)))
             ->when($f['categoria_id'] ?? null, fn ($w, $c) => $w->where('p.categoria_id', $c))
             ->when($f['estado'] ?? null, fn ($w, $e) => $w->where('p.estado', $e))
             ->orderBy('p.nombre')
-            ->select('p.*', 'c.nombre as categoria', 'd.stock_disponible', 'd.stock_reservado', 'd.produccion_reportada', 'd.produccion_futura');
+            ->select('p.*', 'p.id_producto as id', 'c.nombre as categoria', 'd.stock_disponible', 'd.stock_reservado', 'd.produccion_reportada', 'd.produccion_futura');
 
         if ($request->boolean('todos')) {
             return response()->json($q->get());

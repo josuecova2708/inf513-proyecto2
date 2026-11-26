@@ -58,7 +58,7 @@ class MenuSeeder extends Seeder
     public function run(): void
     {
         DB::table('menu')->delete();
-        $permisos = DB::table('permiso')->pluck('id', 'modulo');
+        $permisos = DB::table('permiso')->pluck('id_permiso', 'modulo');
         $orden = 0;
         foreach (self::MENU as $item) {
             $padreId = $this->insertar($item, null, ++$orden, $permisos);
@@ -71,12 +71,12 @@ class MenuSeeder extends Seeder
     private function insertar(array $item, ?int $padreId, int $orden, $permisos): int
     {
         return DB::table('menu')->insertGetId([
-            'padre_id' => $padreId,
+            'menu_padre_id' => $padreId,
             'permiso_id' => isset($item['modulo']) ? $permisos[$item['modulo']] : null,
             'titulo' => $item['titulo'],
             'ruta' => $item['ruta'] ?? null,
             'icono' => $item['icono'] ?? null,
             'orden' => $orden,
-        ]);
+        ], 'id_menu');
     }
 }

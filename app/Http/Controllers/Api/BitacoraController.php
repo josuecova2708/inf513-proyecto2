@@ -23,7 +23,7 @@ class BitacoraController extends Controller
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
         ]);
-        $q = DB::table('bitacora as b')->leftJoin('usuario as u', 'u.id', '=', 'b.usuario_id')
+        $q = DB::table('bitacora as b')->leftJoin('usuario as u', 'u.id_usuario', '=', 'b.usuario_id')
             ->when($f['accion'] ?? null, fn ($w, $a) => $w->where('b.accion', $a))
             ->when($f['q'] ?? null, fn ($w, $t) => $w->where(fn ($x) => $x->where('b.email', 'ilike', $this->like($t))
                 ->orWhereRaw("u.nombre || ' ' || u.apellido ILIKE ?", [$this->like($t)])))
@@ -31,8 +31,8 @@ class BitacoraController extends Controller
             ->when($f['recurso'] ?? null, fn ($w, $r) => $w->where('b.recurso', $r))
             ->when($f['desde'] ?? null, fn ($w, $d) => $w->whereDate('b.fecha', '>=', $d))
             ->when($f['hasta'] ?? null, fn ($w, $d) => $w->whereDate('b.fecha', '<=', $d))
-            ->orderByDesc('b.id')
-            ->select('b.*', DB::raw("u.nombre || ' ' || u.apellido AS usuario"));
+            ->orderByDesc('b.id_bitacora')
+            ->select('b.*', 'b.id_bitacora as id', DB::raw("u.nombre || ' ' || u.apellido AS usuario"));
 
         return $this->paginado($q->paginate($this->porPagina($request, 25)));
     }
@@ -60,8 +60,8 @@ class BitacoraController extends Controller
             'recursos' => DB::table('bitacora')->where('fecha', '>=', $desde)->whereNotNull('recurso')->where('recurso', '!=', 'auth')
                 ->groupBy('recurso')->orderByDesc('total')->limit(10)
                 ->get(['recurso', DB::raw('COUNT(*) AS total')]),
-            'usuarios' => DB::table('bitacora as b')->join('usuario as u', 'u.id', '=', 'b.usuario_id')
-                ->where('b.fecha', '>=', $desde)->groupBy('u.id')->orderByDesc('total')->limit(5)
+            'usuarios' => DB::table('bitacora as b')->join('usuario as u', 'u.id_usuario', '=', 'b.usuario_id')
+                ->where('b.fecha', '>=', $desde)->groupBy('u.id_usuario')->orderByDesc('total')->limit(5)
                 ->get([DB::raw("u.nombre || ' ' || u.apellido AS usuario"), DB::raw('COUNT(*) AS total')]),
         ]);
     }

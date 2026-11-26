@@ -14,7 +14,7 @@ class DatosDemoSeeder extends Seeder
 {
     public function run(): void
     {
-        $rol = DB::table('rol')->pluck('id', 'nombre');
+        $rol = DB::table('rol')->pluck('id_rol', 'nombre');
         $hash = Hash::make('feder123');
 
         // ---------- CU1: usuarios ----------
@@ -34,7 +34,7 @@ class DatosDemoSeeder extends Seeder
                 'email' => $email, 'telefono' => $tel, 'password_hash' => $hash, 'direccion' => $dir,
             ]);
         }
-        $u = DB::table('usuario')->pluck('id', 'email');
+        $u = DB::table('usuario')->pluck('id_usuario', 'email');
 
         // ---------- CU2: comunidades y emprendimientos ----------
         DB::table('comunidad')->insert([
@@ -43,7 +43,7 @@ class DatosDemoSeeder extends Seeder
             ['nombre' => 'Comunidad Cuevas', 'municipio' => 'Samaipata', 'provincia' => 'Florida', 'descripcion' => 'Apicultura y café de altura'],
             ['nombre' => 'Comunidad Jorochito', 'municipio' => 'El Torno', 'provincia' => 'Andres Ibañez', 'descripcion' => 'Hortalizas y frutas'],
         ]);
-        $c = DB::table('comunidad')->pluck('id', 'nombre');
+        $c = DB::table('comunidad')->pluck('id_comunidad', 'nombre');
 
         DB::table('emprendimiento')->insert([
             ['comunidad_id' => $c['Comunidad Los Angeles'], 'usuario_id' => $u['productor.pedro@example.com'], 'nombre' => 'Arrocera Los Angeles', 'rubro' => 'agricola', 'responsable' => 'Pedro Choque', 'ci_nit' => '4567890', 'telefono' => '71122334', 'direccion' => 'Km 5 carretera a San Julian', 'latitud' => -16.906, 'longitud' => -62.616],
@@ -52,7 +52,7 @@ class DatosDemoSeeder extends Seeder
             ['comunidad_id' => $c['Comunidad Cuevas'], 'usuario_id' => null, 'nombre' => 'Café Cuevas', 'rubro' => 'alimentos_procesados', 'responsable' => 'Elena Flores', 'ci_nit' => '7890123', 'telefono' => '76677889', 'direccion' => 'Samaipata centro', 'latitud' => null, 'longitud' => null],
             ['comunidad_id' => $c['Colonia Okinawa'], 'usuario_id' => null, 'nombre' => 'Granos Okinawa', 'rubro' => 'agricola', 'responsable' => 'Kenji Tamura', 'ci_nit' => '8901234', 'telefono' => '77788990', 'direccion' => 'Okinawa Uno, zona norte', 'latitud' => -17.217, 'longitud' => -62.885],
         ]);
-        $e = DB::table('emprendimiento')->pluck('id', 'nombre');
+        $e = DB::table('emprendimiento')->pluck('id_emprendimiento', 'nombre');
 
         // ---------- CU4: categorías y productos ----------
         DB::table('categoria')->insert([
@@ -62,7 +62,7 @@ class DatosDemoSeeder extends Seeder
             ['nombre' => 'Frutas', 'descripcion' => 'Frutas de temporada'],
             ['nombre' => 'Café y bebidas', 'descripcion' => 'Café de altura y bebidas'],
         ]);
-        $cat = DB::table('categoria')->pluck('id', 'nombre');
+        $cat = DB::table('categoria')->pluck('id_categoria', 'nombre');
 
         $productos = [
             ['Granos y cereales', 'Arroz grano de oro', 'Arroz seleccionado de San Julián', 'Bolsa 1 kg', 'kg', 9.50, 'ambas', 50],
@@ -81,7 +81,7 @@ class DatosDemoSeeder extends Seeder
                 'unidad_medida' => $um, 'precio_venta' => $precio, 'modalidad_venta' => $modalidad, 'stock_minimo' => $min,
             ]);
         }
-        $p = DB::table('producto')->pluck('id', 'nombre');
+        $p = DB::table('producto')->pluck('id_producto', 'nombre');
 
         $ofertas = [
             ['Arrocera Los Angeles', 'Arroz grano de oro', 6.50, 'todo el año'],
@@ -115,13 +115,13 @@ class DatosDemoSeeder extends Seeder
         ];
         foreach ($producciones as [$emp, $prod, $tipo, $cant, $um, $dProd, $dDisp, $precio, $proc, $lote, $cantLote, $vence, $costo]) {
             $id = DB::table('produccion')->insertGetId([
-                'emprendimiento_id' => $e[$emp], 'producto_id' => $p[$prod], 'validado_por' => $personal, 'tipo' => $tipo,
+                'emprendimiento_id' => $e[$emp], 'producto_id' => $p[$prod], 'validador_id' => $personal, 'tipo' => $tipo,
                 'cantidad' => $cant, 'unidad_medida' => $um,
                 'fecha_produccion' => $dProd === null ? null : now()->addDays($dProd)->toDateString(),
                 'fecha_disponible' => now()->addDays($dDisp)->toDateString(),
                 'precio_propuesto' => $precio, 'procedencia' => $proc, 'estado' => 'validada',
                 'fecha_validacion' => now()->addDays(($dDisp ?? 0) - 1),
-            ]);
+            ], 'id_produccion');
             if ($lote) {
                 DB::select('SELECT fn_ingresar_lote(?, ?, ?, ?, ?, ?)', [
                     $id, $lote, $cantLote, $personal, now()->addDays($vence)->toDateString(), $costo,

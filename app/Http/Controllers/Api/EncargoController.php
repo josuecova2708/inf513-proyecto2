@@ -42,15 +42,15 @@ class EncargoController extends Controller
     {
         $f = $request->validate(['estado' => ['nullable', Rule::in(['solicitado', 'aceptado', 'rechazado', 'disponible', 'convertido', 'cancelado'])]]);
         $u = $request->user();
-        $q = DB::table('encargo as e')->join('usuario as u', 'u.id', '=', 'e.cliente_id')
-            ->leftJoin('pedido as p', 'p.encargo_id', '=', 'e.id')
+        $q = DB::table('encargo as e')->join('usuario as u', 'u.id_usuario', '=', 'e.cliente_id')
+            ->leftJoin('pedido as p', 'p.encargo_id', '=', 'e.id_encargo')
             ->when(! $u->esStaff(), fn ($w) => $w->where('e.cliente_id', $u->id))
             ->when($f['estado'] ?? null, fn ($w, $s) => $w->where('e.estado', $s))
             ->orderByRaw("CASE e.estado WHEN 'solicitado' THEN 0 WHEN 'aceptado' THEN 1 WHEN 'disponible' THEN 2 ELSE 3 END")
-            ->orderByDesc('e.id')
-            ->select('e.*', 'p.id as pedido_id', 'p.numero as pedido_numero', DB::raw("u.nombre || ' ' || u.apellido AS cliente"),
-                DB::raw('(SELECT COALESCE(SUM(de.cantidad * COALESCE(de.precio_estimado, 0)), 0) FROM detalle_encargo de WHERE de.encargo_id = e.id) AS total_estimado'),
-                DB::raw("(SELECT string_agg(pr.nombre || ' x' || trim(to_char(de.cantidad, 'FM999999990.##')), ', ') FROM detalle_encargo de JOIN producto pr ON pr.id = de.producto_id WHERE de.encargo_id = e.id) AS productos"));
+            ->orderByDesc('e.id_encargo')
+            ->select('e.*', 'e.id_encargo as id', 'p.id_pedido as pedido_id', 'p.numero as pedido_numero', DB::raw("u.nombre || ' ' || u.apellido AS cliente"),
+                DB::raw('(SELECT COALESCE(SUM(de.cantidad * COALESCE(de.precio_estimado, 0)), 0) FROM detalle_encargo de WHERE de.encargo_id = e.id_encargo) AS total_estimado'),
+                DB::raw("(SELECT string_agg(pr.nombre || ' x' || trim(to_char(de.cantidad, 'FM999999990.##')), ', ') FROM detalle_encargo de JOIN producto pr ON pr.id_producto = de.producto_id WHERE de.encargo_id = e.id_encargo) AS productos"));
 
         return $this->paginado($q->paginate($this->porPagina($request)));
     }
@@ -58,12 +58,12 @@ class EncargoController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $e = $this->encargoPara($id, $request->user());
-        $detalles = DB::table('detalle_encargo as de')->join('producto as p', 'p.id', '=', 'de.producto_id')
+        $detalles = DB::table('detalle_encargo as de')->join('producto as p', 'p.id_producto', '=', 'de.producto_id')
             ->join('v_disponibilidad_producto as d', 'd.producto_id', '=', 'de.producto_id')
             ->where('de.encargo_id', $id)
             ->get(['de.producto_id', 'p.nombre', 'p.unidad_medida', 'de.cantidad', 'de.precio_estimado', 'd.stock_disponible', 'd.produccion_futura']);
 
-        return response()->json(['encargo' => $e->load('cliente:id,nombre,apellido,email,telefono'), 'detalles' => $detalles]);
+        return response()->json(['encargo' => $e->load('cliente:id_usuario,nombre,apellido,email,telefono'), 'detalles' => $detalles]);
     }
 
     public function store(Request $request): JsonResponse
@@ -72,7 +72,7 @@ class EncargoController extends Controller
             'fecha_requerida' => ['required', 'date', 'after:today'],
             'observacion' => ['nullable', 'string', 'max:500'],
             'items' => ['required', 'array', 'min:1', 'max:20'],
-            'items.*.producto_id' => ['required', 'integer', 'distinct', 'exists:producto,id'],
+            'items.*.producto_id' => ['required', 'integer', 'distinct', 'exists:producto,id_producto'],
             'items.*.cantidad' => ['required', 'numeric', 'gt:0', 'max:100000'],
         ], [
             'fecha_requerida.after' => 'La fecha requerida debe ser posterior a hoy.',
@@ -88,9 +88,9 @@ class EncargoController extends Controller
         $id = DB::transaction(function () use ($d, $u) {
             $id = DB::table('encargo')->insertGetId([
                 'cliente_id' => $u->id, 'fecha_requerida' => $d['fecha_requerida'], 'observacion' => $d['observacion'] ?? null,
-            ]);
+            ], 'id_encargo');
             foreach ($d['items'] as $it) {
-                $p = DB::table('producto')->where('id', $it['producto_id'])->first();
+                $p = DB::table('producto')->where('id_producto', $it['producto_id'])->first(['*', 'id_producto as id']);
                 if ($p->estado !== 'activo') {
                     throw new ErrorNegocio("“{$p->nombre}” no está a la venta.");
                 }
@@ -126,7 +126,7 @@ class EncargoController extends Controller
                 throw new ErrorNegocio("No se puede pasar el encargo de {$e->estado} a {$d['estado']}.");
             }
             if ($d['estado'] === 'disponible') {
-                $falta = DB::table('detalle_encargo as de')->join('producto as p', 'p.id', '=', 'de.producto_id')
+                $falta = DB::table('detalle_encargo as de')->join('producto as p', 'p.id_producto', '=', 'de.producto_id')
                     ->join('v_disponibilidad_producto as v', 'v.producto_id', '=', 'de.producto_id')
                     ->where('de.encargo_id', $id)->whereColumn('v.stock_disponible', '<', 'de.cantidad')
                     ->get(['p.nombre', 'de.cantidad', 'v.stock_disponible']);
@@ -176,16 +176,16 @@ class EncargoController extends Controller
             }
             $pedido = PedidoServicio::nuevoPedido($e->cliente_id, 'encargo', $e->id);
             DB::insert('INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario)
-                        SELECT ?, de.producto_id, de.cantidad, p.precio_venta FROM detalle_encargo de JOIN producto p ON p.id = de.producto_id
+                        SELECT ?, de.producto_id, de.cantidad, p.precio_venta FROM detalle_encargo de JOIN producto p ON p.id_producto = de.producto_id
                          WHERE de.encargo_id = ?', [$pedido, $e->id]);
             PedidoServicio::recalcular($pedido);
             PedidoServicio::reservarYEntregar($pedido, $d);
             PedidoServicio::recalcular($pedido);
             if ($u->esStaff()) {
-                DB::table('pedido')->where('id', $pedido)->update(['gestionado_por' => $u->id]);
+                DB::table('pedido')->where('id_pedido', $pedido)->update(['personal_id' => $u->id]);
             }
             $e->update(['estado' => 'convertido']);
-            $numero = DB::table('pedido')->where('id', $pedido)->value('numero');
+            $numero = DB::table('pedido')->where('id_pedido', $pedido)->value('numero');
             NotificacionServicio::notificar($e->cliente_id, 'pedido_confirmado', "Tu encargo #{$e->id} se convirtió en el pedido {$numero}. Completa el pago para confirmarlo.", $pedido, $e->id);
 
             return $pedido;

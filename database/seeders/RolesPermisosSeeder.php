@@ -85,8 +85,8 @@ class RolesPermisosSeeder extends Seeder
             );
         }
 
-        $roles = DB::table('rol')->pluck('id', 'nombre');
-        $permisos = DB::table('permiso')->pluck('id', 'modulo');
+        $roles = DB::table('rol')->pluck('id_rol', 'nombre');
+        $permisos = DB::table('permiso')->pluck('id_permiso', 'modulo');
 
         foreach (self::MATRIZ as $rol => $modulos) {
             foreach ($modulos as $modulo => $flags) {

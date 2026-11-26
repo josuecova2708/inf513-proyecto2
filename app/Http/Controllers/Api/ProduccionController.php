@@ -17,8 +17,8 @@ class ProduccionController extends Controller
     private function reglas(): array
     {
         return [
-            'emprendimiento_id' => ['required', 'integer', 'exists:emprendimiento,id'],
-            'producto_id' => ['required', 'integer', 'exists:producto,id'],
+            'emprendimiento_id' => ['required', 'integer', 'exists:emprendimiento,id_emprendimiento'],
+            'producto_id' => ['required', 'integer', 'exists:producto,id_producto'],
             'tipo' => ['required', Rule::in(['disponible', 'futura'])],
             'cantidad' => ['required', 'numeric', 'gt:0', 'max:10000000'],
             'unidad_medida' => ['required', 'string', 'max:20'],
@@ -46,20 +46,20 @@ class ProduccionController extends Controller
         ]);
         $u = $request->user();
         $q = DB::table('produccion as pr')
-            ->join('emprendimiento as e', 'e.id', '=', 'pr.emprendimiento_id')
-            ->join('comunidad as c', 'c.id', '=', 'e.comunidad_id')
-            ->join('producto as p', 'p.id', '=', 'pr.producto_id')
-            ->leftJoin('usuario as v', 'v.id', '=', 'pr.validado_por')
+            ->join('emprendimiento as e', 'e.id_emprendimiento', '=', 'pr.emprendimiento_id')
+            ->join('comunidad as c', 'c.id_comunidad', '=', 'e.comunidad_id')
+            ->join('producto as p', 'p.id_producto', '=', 'pr.producto_id')
+            ->leftJoin('usuario as v', 'v.id_usuario', '=', 'pr.validador_id')
             ->when(! $u->esStaff(), fn ($w) => $w->where('e.usuario_id', $u->id))
             ->when($f['estado'] ?? null, fn ($w, $s) => $w->where('pr.estado', $s))
             ->when($f['tipo'] ?? null, fn ($w, $t) => $w->where('pr.tipo', $t))
             ->when($f['emprendimiento_id'] ?? null, fn ($w, $e) => $w->where('pr.emprendimiento_id', $e))
             ->when($f['q'] ?? null, fn ($w, $t) => $w->where(fn ($x) => $x->where('p.nombre', 'ilike', $this->like($t))->orWhere('e.nombre', 'ilike', $this->like($t))))
-            ->orderByRaw("CASE pr.estado WHEN 'reportada' THEN 0 ELSE 1 END")->orderByDesc('pr.id')
-            ->select('pr.*', 'p.nombre as producto', 'e.nombre as emprendimiento', 'c.nombre as comunidad',
+            ->orderByRaw("CASE pr.estado WHEN 'reportada' THEN 0 ELSE 1 END")->orderByDesc('pr.id_produccion')
+            ->select('pr.*', 'pr.id_produccion as id', 'p.nombre as producto', 'e.nombre as emprendimiento', 'c.nombre as comunidad',
                 DB::raw("v.nombre || ' ' || v.apellido AS validador"),
-                DB::raw('(SELECT COUNT(*) FROM lote l WHERE l.produccion_id = pr.id) AS lotes'),
-                DB::raw('(SELECT COALESCE(SUM(l.cantidad_inicial), 0) FROM lote l WHERE l.produccion_id = pr.id) AS cantidad_en_lotes'));
+                DB::raw('(SELECT COUNT(*) FROM lote l WHERE l.produccion_id = pr.id_produccion) AS lotes'),
+                DB::raw('(SELECT COALESCE(SUM(l.cantidad_inicial), 0) FROM lote l WHERE l.produccion_id = pr.id_produccion) AS cantidad_en_lotes'));
 
         return $this->paginado($q->paginate($this->porPagina($request)));
     }
@@ -106,10 +106,10 @@ class ProduccionController extends Controller
                 throw new ErrorNegocio('La producción ya fue '.$p->estado.'.');
             }
             $p->update([
-                'estado' => $d['estado'], 'validado_por' => $u->id, 'fecha_validacion' => now(),
+                'estado' => $d['estado'], 'validador_id' => $u->id, 'fecha_validacion' => now(),
                 'observacion' => $d['observacion'] ?? $p->observacion,
             ]);
-            $dueno = DB::table('emprendimiento')->where('id', $p->emprendimiento_id)->value('usuario_id');
+            $dueno = DB::table('emprendimiento')->where('id_emprendimiento', $p->emprendimiento_id)->value('usuario_id');
             if ($dueno) {
                 NotificacionServicio::notificar($dueno, 'produccion_validada', "Tu producción #{$p->id} fue ".mb_strtoupper($d['estado']).'.'
                     .(! empty($d['observacion']) ? " Observación: {$d['observacion']}" : ''));

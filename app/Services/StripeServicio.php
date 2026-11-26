@@ -47,7 +47,7 @@ class StripeServicio
         $c = $this->llamar(fn () => $this->api()->customers->create([
             'email' => $u->email, 'name' => trim("{$u->nombre} {$u->apellido}"), 'metadata' => ['usuario_id' => $u->id],
         ]));
-        DB::table('usuario')->where('id', $u->id)->update(['stripe_customer_id' => $c->id]);
+        DB::table('usuario')->where('id_usuario', $u->id)->update(['stripe_customer_id' => $c->id]);
         $u->stripe_customer_id = $c->id;
 
         return $c->id;

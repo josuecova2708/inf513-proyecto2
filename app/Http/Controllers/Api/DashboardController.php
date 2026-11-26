@@ -29,7 +29,7 @@ class DashboardController extends Controller
                 'pedidos' => (int) $kpi->pedidos,
                 'ticket_promedio' => round((float) $kpi->ticket, 2),
                 'cobrado' => (float) DB::table('pago')->where('estado', 'pagado')->where('fecha', '>=', $desde)->sum('monto'),
-                'clientes' => DB::table('usuario as u')->join('rol as r', 'r.id', '=', 'u.rol_id')->where('r.nombre', 'Cliente')->where('u.estado', 'activo')->count(),
+                'clientes' => DB::table('usuario as u')->join('rol as r', 'r.id_rol', '=', 'u.rol_id')->where('r.nombre', 'Cliente')->where('u.estado', 'activo')->count(),
                 'productores' => DB::table('emprendimiento')->where('estado', 'activo')->count(),
                 'pedidos_por_atender' => DB::table('pedido')->whereIn('estado', ['confirmado', 'listo_entrega'])->count(),
                 'pagos_por_verificar' => DB::table('pago')->where('estado', 'pendiente')->count(),
@@ -40,17 +40,17 @@ class DashboardController extends Controller
             'ventas_por_dia' => DB::table('pedido')->whereIn('estado', $vendido)->where('fecha', '>=', $desde)
                 ->groupByRaw('fecha::date')->orderByRaw('fecha::date')
                 ->get([DB::raw('fecha::date AS dia'), DB::raw('COUNT(*) AS pedidos'), DB::raw('SUM(total) AS ventas')]),
-            'top_productos' => DB::table('detalle_pedido as dp')->join('pedido as p', 'p.id', '=', 'dp.pedido_id')
-                ->join('producto as pr', 'pr.id', '=', 'dp.producto_id')
+            'top_productos' => DB::table('detalle_pedido as dp')->join('pedido as p', 'p.id_pedido', '=', 'dp.pedido_id')
+                ->join('producto as pr', 'pr.id_producto', '=', 'dp.producto_id')
                 ->whereIn('p.estado', $vendido)->where('p.fecha', '>=', $desde)
                 ->groupBy('pr.nombre')->orderByDesc('monto')->limit(6)
                 ->get(['pr.nombre as producto', DB::raw('SUM(dp.cantidad) AS cantidad'), DB::raw('SUM(dp.subtotal) AS monto')]),
-            'pedidos_por_estado' => DB::table('pedido as p')->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id'))
+            'pedidos_por_estado' => DB::table('pedido as p')->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id_pedido'))
                 ->groupBy('estado')->get(['estado', DB::raw('COUNT(*) AS total')]),
-            'ventas_por_comunidad' => DB::table('reserva_lote as rl')->join('detalle_pedido as dp', 'dp.id', '=', 'rl.detalle_pedido_id')
-                ->join('pedido as p', 'p.id', '=', 'dp.pedido_id')->join('lote as l', 'l.id', '=', 'rl.lote_id')
-                ->join('produccion as pr', 'pr.id', '=', 'l.produccion_id')->join('emprendimiento as e', 'e.id', '=', 'pr.emprendimiento_id')
-                ->join('comunidad as c', 'c.id', '=', 'e.comunidad_id')
+            'ventas_por_comunidad' => DB::table('reserva_lote as rl')->join('detalle_pedido as dp', 'dp.id_detalle_pedido', '=', 'rl.detalle_pedido_id')
+                ->join('pedido as p', 'p.id_pedido', '=', 'dp.pedido_id')->join('lote as l', 'l.id_lote', '=', 'rl.lote_id')
+                ->join('produccion as pr', 'pr.id_produccion', '=', 'l.produccion_id')->join('emprendimiento as e', 'e.id_emprendimiento', '=', 'pr.emprendimiento_id')
+                ->join('comunidad as c', 'c.id_comunidad', '=', 'e.comunidad_id')
                 ->whereIn('p.estado', $vendido)->where('p.fecha', '>=', $desde)
                 ->groupBy('c.nombre')->orderByDesc('monto')
                 ->get(['c.nombre as comunidad', DB::raw('SUM(rl.cantidad * dp.precio_unitario) AS monto')]),
@@ -80,28 +80,28 @@ class DashboardController extends Controller
 
         if ($u->esCliente()) {
             $r['pedidos_activos'] = DB::table('pedido as p')->where('cliente_id', $u->id)->whereNotIn('estado', ['entregado', 'cancelado'])
-                ->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id'))->count();
-            $r['saldo_pendiente'] = (float) DB::table('v_saldo_pedido as s')->join('pedido as p', 'p.id', '=', 's.pedido_id')
+                ->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id_pedido'))->count();
+            $r['saldo_pendiente'] = (float) DB::table('v_saldo_pedido as s')->join('pedido as p', 'p.id_pedido', '=', 's.pedido_id')
                 ->where('p.cliente_id', $u->id)->where('p.estado', '!=', 'cancelado')
-                ->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id'))->sum('s.saldo_pendiente');
+                ->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id_pedido'))->sum('s.saldo_pendiente');
             $r['encargos_activos'] = DB::table('encargo')->where('cliente_id', $u->id)->whereIn('estado', ['solicitado', 'aceptado', 'disponible'])->count();
-            $r['cuotas_pendientes'] = DB::table('cuota_pago as c')->join('plan_pago as pl', 'pl.id', '=', 'c.plan_pago_id')
+            $r['cuotas_pendientes'] = DB::table('cuota_pago as c')->join('plan_pago as pl', 'pl.id_plan_pago', '=', 'c.plan_pago_id')
                 ->where('pl.usuario_id', $u->id)->where('pl.estado', 'vigente')->whereIn('c.estado', ['pendiente', 'vencida'])->count();
-            $r['ultimos_pedidos'] = DB::table('pedido as p')->join('v_saldo_pedido as s', 's.pedido_id', '=', 'p.id')
-                ->where('p.cliente_id', $u->id)->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id'))
-                ->orderByDesc('p.id')->limit(5)->get(['p.id', 'p.numero', 'p.fecha', 'p.estado', 'p.total', 's.saldo_pendiente']);
+            $r['ultimos_pedidos'] = DB::table('pedido as p')->join('v_saldo_pedido as s', 's.pedido_id', '=', 'p.id_pedido')
+                ->where('p.cliente_id', $u->id)->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id_pedido'))
+                ->orderByDesc('p.id_pedido')->limit(5)->get(['p.id_pedido as id', 'p.numero', 'p.fecha', 'p.estado', 'p.total', 's.saldo_pendiente']);
         } elseif ($u->esProductor()) {
             $e = $u->emprendimiento;
             $r['emprendimiento'] = $e?->only(['id', 'nombre', 'rubro', 'estado']);
             if ($e) {
                 $r['produccion'] = DB::table('produccion')->where('emprendimiento_id', $e->id)->groupBy('estado')->selectRaw('estado, COUNT(*) AS n')->pluck('n', 'estado');
-                $r['stock_lotes'] = (float) DB::table('lote as l')->join('produccion as pr', 'pr.id', '=', 'l.produccion_id')
+                $r['stock_lotes'] = (float) DB::table('lote as l')->join('produccion as pr', 'pr.id_produccion', '=', 'l.produccion_id')
                     ->where('pr.emprendimiento_id', $e->id)->where('l.estado', 'disponible')->sum('l.stock_disponible');
-                $r['vendido'] = (float) DB::table('reserva_lote as rl')->join('lote as l', 'l.id', '=', 'rl.lote_id')
-                    ->join('produccion as pr', 'pr.id', '=', 'l.produccion_id')->join('detalle_pedido as dp', 'dp.id', '=', 'rl.detalle_pedido_id')
+                $r['vendido'] = (float) DB::table('reserva_lote as rl')->join('lote as l', 'l.id_lote', '=', 'rl.lote_id')
+                    ->join('produccion as pr', 'pr.id_produccion', '=', 'l.produccion_id')->join('detalle_pedido as dp', 'dp.id_detalle_pedido', '=', 'rl.detalle_pedido_id')
                     ->where('pr.emprendimiento_id', $e->id)->where('rl.estado', 'confirmada')->sum(DB::raw('rl.cantidad * dp.precio_unitario'));
-                $r['lotes'] = DB::table('lote as l')->join('produccion as pr', 'pr.id', '=', 'l.produccion_id')->join('producto as p', 'p.id', '=', 'pr.producto_id')
-                    ->where('pr.emprendimiento_id', $e->id)->orderByDesc('l.id')->limit(5)
+                $r['lotes'] = DB::table('lote as l')->join('produccion as pr', 'pr.id_produccion', '=', 'l.produccion_id')->join('producto as p', 'p.id_producto', '=', 'pr.producto_id')
+                    ->where('pr.emprendimiento_id', $e->id)->orderByDesc('l.id_lote')->limit(5)
                     ->get(['l.codigo', 'p.nombre as producto', 'l.stock_disponible', 'l.estado', 'l.fecha_vencimiento']);
             }
         } else {
@@ -110,7 +110,7 @@ class DashboardController extends Controller
             $r['produccion_por_validar'] = DB::table('produccion')->where('estado', 'reportada')->count();
             $r['alertas_activas'] = DB::table('alerta_inventario')->where('estado', 'activa')->count();
             $r['encargos_nuevos'] = DB::table('encargo')->where('estado', 'solicitado')->count();
-            $r['entregas_pendientes'] = DB::table('entrega as en')->join('pedido as p', 'p.id', '=', 'en.pedido_id')
+            $r['entregas_pendientes'] = DB::table('entrega as en')->join('pedido as p', 'p.id_pedido', '=', 'en.pedido_id')
                 ->whereIn('en.estado', ['pendiente', 'en_camino'])->where('p.estado', 'listo_entrega')->count();
             $r['puede_dashboard'] = PermisoServicio::puede($u, 'dashboard');
         }

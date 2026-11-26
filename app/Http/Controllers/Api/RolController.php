@@ -15,18 +15,18 @@ class RolController extends Controller
     public function index(): JsonResponse
     {
         return response()->json(DB::table('rol as r')
-            ->leftJoin('usuario as u', 'u.rol_id', '=', 'r.id')
-            ->groupBy('r.id')->orderBy('r.id')
-            ->get(['r.id', 'r.nombre', 'r.descripcion', DB::raw('COUNT(u.id) AS usuarios')]));
+            ->leftJoin('usuario as u', 'u.rol_id', '=', 'r.id_rol')
+            ->groupBy('r.id_rol')->orderBy('r.id_rol')
+            ->get(['r.id_rol as id', 'r.nombre', 'r.descripcion', DB::raw('COUNT(u.id_usuario) AS usuarios')]));
     }
 
     public function permisos(int $id): JsonResponse
     {
-        $rol = DB::table('rol')->where('id', $id)->first() ?? abort(404);
+        $rol = DB::table('rol')->where('id_rol', $id)->first(['*', 'id_rol as id']) ?? abort(404);
         $filas = DB::table('permiso as p')
-            ->leftJoin('rol_permiso as rp', fn ($j) => $j->on('rp.permiso_id', '=', 'p.id')->where('rp.rol_id', $id))
-            ->orderBy('p.id')
-            ->get(['p.id', 'p.modulo', 'p.nombre',
+            ->leftJoin('rol_permiso as rp', fn ($j) => $j->on('rp.permiso_id', '=', 'p.id_permiso')->where('rp.rol_id', $id))
+            ->orderBy('p.id_permiso')
+            ->get(['p.id_permiso as id', 'p.modulo', 'p.nombre',
                 DB::raw('COALESCE(rp.ver, false) AS ver'), DB::raw('COALESCE(rp.crear, false) AS crear'),
                 DB::raw('COALESCE(rp.editar, false) AS editar'), DB::raw('COALESCE(rp.eliminar, false) AS eliminar')]);
 
@@ -35,10 +35,10 @@ class RolController extends Controller
 
     public function guardarPermisos(Request $request, int $id): JsonResponse
     {
-        $rol = DB::table('rol')->where('id', $id)->first() ?? abort(404);
+        $rol = DB::table('rol')->where('id_rol', $id)->first(['*', 'id_rol as id']) ?? abort(404);
         $d = $request->validate([
             'permisos' => ['required', 'array'],
-            'permisos.*.permiso_id' => ['required', 'integer', 'exists:permiso,id'],
+            'permisos.*.permiso_id' => ['required', 'integer', 'exists:permiso,id_permiso'],
             'permisos.*.ver' => ['required', 'boolean'],
             'permisos.*.crear' => ['required', 'boolean'],
             'permisos.*.editar' => ['required', 'boolean'],
@@ -47,7 +47,7 @@ class RolController extends Controller
 
         // Protección: el Administrador no puede perder el acceso a la matriz de permisos
         if ($rol->nombre === 'Administrador') {
-            $rolesId = DB::table('permiso')->where('modulo', 'roles')->value('id');
+            $rolesId = DB::table('permiso')->where('modulo', 'roles')->value('id_permiso');
             foreach ($d['permisos'] as $p) {
                 if ((int) $p['permiso_id'] === (int) $rolesId && (! $p['ver'] || ! $p['editar'])) {
                     throw new ErrorNegocio('El Administrador debe conservar los permisos de ver y editar "Roles y permisos".');

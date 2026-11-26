@@ -23,8 +23,8 @@ class NotificacionServicio
     /** Avisa a todo el personal de FEDER (Administrador y Personal). */
     public static function notificarStaff(string $tipo, string $mensaje, ?int $pedidoId = null, ?int $encargoId = null): void
     {
-        $ids = DB::table('usuario as u')->join('rol as r', 'r.id', '=', 'u.rol_id')
-            ->whereIn('r.nombre', ['Administrador', 'Personal'])->where('u.estado', 'activo')->pluck('u.id');
+        $ids = DB::table('usuario as u')->join('rol as r', 'r.id_rol', '=', 'u.rol_id')
+            ->whereIn('r.nombre', ['Administrador', 'Personal'])->where('u.estado', 'activo')->pluck('u.id_usuario as id');
         foreach ($ids as $id) {
             self::notificar($id, $tipo, $mensaje, $pedidoId, $encargoId);
         }

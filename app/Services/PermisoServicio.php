@@ -21,7 +21,7 @@ class PermisoServicio
     {
         return Cache::remember("permisos_rol_{$rolId}", self::TTL, function () use ($rolId) {
             return DB::table('rol_permiso as rp')
-                ->join('permiso as p', 'p.id', '=', 'rp.permiso_id')
+                ->join('permiso as p', 'p.id_permiso', '=', 'rp.permiso_id')
                 ->where('rp.rol_id', $rolId)
                 ->get(['p.modulo', 'rp.ver', 'rp.crear', 'rp.editar', 'rp.eliminar'])
                 ->mapWithKeys(fn ($r) => [$r->modulo => [
@@ -45,19 +45,19 @@ class PermisoServicio
     {
         $permisos = self::permisosRol((int) $usuario->rol_id);
         $filas = Cache::remember('menu_items', self::TTL, fn () => DB::table('menu as m')
-            ->leftJoin('permiso as p', 'p.id', '=', 'm.permiso_id')
+            ->leftJoin('permiso as p', 'p.id_permiso', '=', 'm.permiso_id')
             ->where('m.activo', true)
             ->orderBy('m.orden')
-            ->get(['m.id', 'm.padre_id', 'm.titulo', 'm.ruta', 'm.icono', 'p.modulo'])
+            ->get(['m.id_menu as id', 'm.menu_padre_id', 'm.titulo', 'm.ruta', 'm.icono', 'p.modulo'])
             ->map(fn ($r) => (array) $r)->all());
 
         $visible = fn (array $f) => $f['modulo'] === null || ($permisos[$f['modulo']]['ver'] ?? false);
         $arbol = [];
         foreach ($filas as $f) {
-            if ($f['padre_id'] !== null) {
+            if ($f['menu_padre_id'] !== null) {
                 continue;
             }
-            $hijos = array_values(array_filter($filas, fn ($h) => $h['padre_id'] === $f['id'] && $visible($h)));
+            $hijos = array_values(array_filter($filas, fn ($h) => $h['menu_padre_id'] === $f['id'] && $visible($h)));
             $hijos = array_map(fn ($h) => self::item($h), $hijos);
             if ($f['ruta'] === null && count($hijos) === 0) {
                 continue;
@@ -79,7 +79,7 @@ class PermisoServicio
     public static function limpiarCache(?int $rolId = null): void
     {
         Cache::forget('menu_items');
-        $ids = $rolId ? [$rolId] : DB::table('rol')->pluck('id')->all();
+        $ids = $rolId ? [$rolId] : DB::table('rol')->pluck('id_rol')->all();
         foreach ($ids as $id) {
             Cache::forget("permisos_rol_{$id}");
         }

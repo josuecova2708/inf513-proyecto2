@@ -24,14 +24,14 @@ RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE r RECORD;
 BEGIN
     FOR r IN
-        SELECT rl.id, rl.lote_id, rl.cantidad, dp.producto_id
-        FROM reserva_lote rl JOIN detalle_pedido dp ON dp.id = rl.detalle_pedido_id
+        SELECT rl.id_reserva_lote AS id, rl.lote_id, rl.cantidad, dp.producto_id
+        FROM reserva_lote rl JOIN detalle_pedido dp ON dp.id_detalle_pedido = rl.detalle_pedido_id
         WHERE dp.pedido_id = p_pedido_id AND rl.estado = 'reservada'
         FOR UPDATE OF rl
     LOOP
         UPDATE lote SET stock_reservado = stock_reservado - r.cantidad, version = version + 1
-         WHERE id = r.lote_id;
-        UPDATE reserva_lote SET estado = 'confirmada' WHERE id = r.id;
+         WHERE id_lote = r.lote_id;
+        UPDATE reserva_lote SET estado = 'confirmada' WHERE id_reserva_lote = r.id;
         INSERT INTO movimiento_inventario (lote_id, usuario_id, tipo, cantidad, motivo)
         VALUES (r.lote_id, p_usuario_id, 'salida', r.cantidad, 'Pedido ' || p_pedido_id);
         PERFORM fn_revisar_stock_minimo(r.producto_id);

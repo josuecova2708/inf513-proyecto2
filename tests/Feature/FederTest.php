@@ -109,21 +109,21 @@ class FederTest extends TestCase
     {
         $this->como('cliente.carlos@example.com');
         $tarjeta = $this->postJson('/api/mis-metodos-pago', [
-            'metodo_pago_id' => DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id'),
+            'metodo_pago_id' => DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id_metodo_pago'),
             'alias' => 'Visa', 'titular' => 'Carlos Vaca', 'numero_tarjeta' => '4111111111111111', 'mes_venc' => 12, 'anio_venc' => now()->year + 2, 'cvv' => '123',
         ])->assertCreated()->json('metodo.id');
         $this->assertDatabaseMissing('metodo_pago_usuario', ['ultimos4' => '4111111111111111']);
 
-        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id');
+        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id_producto');
         $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 2])->assertOk();
         $pedido = $this->postJson('/api/carrito/confirmar', ['tipo_entrega' => 'recojo'])->assertCreated()->json('pedido_id');
 
-        $this->assertSame('pendiente', DB::table('pedido')->where('id', $pedido)->value('estado'));
-        $this->assertEquals(2, DB::table('reserva_lote as r')->join('detalle_pedido as d', 'd.id', '=', 'r.detalle_pedido_id')->where('d.pedido_id', $pedido)->sum('r.cantidad'));
+        $this->assertSame('pendiente', DB::table('pedido')->where('id_pedido', $pedido)->value('estado'));
+        $this->assertEquals(2, DB::table('reserva_lote as r')->join('detalle_pedido as d', 'd.id_detalle_pedido', '=', 'r.detalle_pedido_id')->where('d.pedido_id', $pedido)->sum('r.cantidad'));
 
-        $this->postJson("/api/pedidos/{$pedido}/pagar", ['metodo_pago_id' => DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id'), 'metodo_pago_usuario_id' => $tarjeta])
+        $this->postJson("/api/pedidos/{$pedido}/pagar", ['metodo_pago_id' => DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id_metodo_pago'), 'metodo_pago_usuario_id' => $tarjeta])
             ->assertCreated()->assertJson(['estado' => 'pagado']);
-        $this->assertSame('confirmado', DB::table('pedido')->where('id', $pedido)->value('estado'));
+        $this->assertSame('confirmado', DB::table('pedido')->where('id_pedido', $pedido)->value('estado'));
         $this->assertDatabaseHas('notificacion', ['pedido_id' => $pedido, 'tipo' => 'pedido_confirmado', 'canal' => 'sistema']);
     }
 
@@ -146,23 +146,23 @@ class FederTest extends TestCase
             ->andReturn(PaymentIntent::constructFrom(['id' => 'pi_prueba_3ds', 'status' => 'succeeded'])));
 
         $this->como('cliente.carlos@example.com');
-        $tarjetaMetodo = DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id');
+        $tarjetaMetodo = DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id_metodo_pago');
         $tarjeta = $this->postJson('/api/mis-metodos-pago', [
             'metodo_pago_id' => $tarjetaMetodo, 'alias' => 'Visa', 'titular' => 'Carlos Vaca', 'numero_tarjeta' => '4111111111111111',
             'mes_venc' => 12, 'anio_venc' => now()->year + 2, 'cvv' => '123',
         ])->assertCreated()->json('metodo.id');
-        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id');
+        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id_producto');
         $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 1])->assertOk();
         $pedido = $this->postJson('/api/carrito/confirmar', ['tipo_entrega' => 'recojo'])->json('pedido_id');
 
         $r = $this->postJson("/api/pedidos/{$pedido}/pagar", ['metodo_pago_id' => $tarjetaMetodo, 'metodo_pago_usuario_id' => $tarjeta])
             ->assertCreated()->assertJson(['estado' => 'pendiente', 'requiere_accion' => true, 'client_secret' => 'pi_prueba_3ds_secret_x']);
-        $this->assertSame('pendiente', DB::table('pedido')->where('id', $pedido)->value('estado'));
-        $this->assertDatabaseHas('pago', ['id' => $r->json('pago_id'), 'pasarela' => 'stripe', 'codigo_transaccion' => 'pi_prueba_3ds']);
+        $this->assertSame('pendiente', DB::table('pedido')->where('id_pedido', $pedido)->value('estado'));
+        $this->assertDatabaseHas('pago', ['id_pago' => $r->json('pago_id'), 'pasarela' => 'stripe', 'codigo_transaccion' => 'pi_prueba_3ds']);
 
         // Tras el 3D Secure, el servidor consulta a Stripe (no confía en el navegador)
         $this->postJson("/api/pagos/{$r->json('pago_id')}/confirmar")->assertOk()->assertJson(['estado' => 'pagado']);
-        $this->assertSame('confirmado', DB::table('pedido')->where('id', $pedido)->value('estado'));
+        $this->assertSame('confirmado', DB::table('pedido')->where('id_pedido', $pedido)->value('estado'));
 
         // Otro cliente no puede confirmar pagos ajenos
         $this->como('cliente.ana@example.com')->postJson("/api/pagos/{$r->json('pago_id')}/confirmar")->assertForbidden();
@@ -171,12 +171,12 @@ class FederTest extends TestCase
     public function test_plan_de_pagos_en_cuotas(): void
     {
         $this->como('cliente.carlos@example.com');
-        $soya = DB::table('producto')->where('nombre', 'Soya en grano')->value('id');
+        $soya = DB::table('producto')->where('nombre', 'Soya en grano')->value('id_producto');
         $this->postJson('/api/carrito/items', ['producto_id' => $soya, 'cantidad' => 3])->assertOk();
         $pedido = $this->postJson('/api/carrito/confirmar', ['tipo_entrega' => 'recojo'])->json('pedido_id');
 
         $this->postJson("/api/pedidos/{$pedido}/plan", ['nro_cuotas' => 3, 'frecuencia' => 'mensual'])->assertCreated();
-        $cuotas = DB::table('cuota_pago as c')->join('plan_pago as p', 'p.id', '=', 'c.plan_pago_id')->where('p.pedido_id', $pedido)->orderBy('numero')->get(['c.id', 'c.monto']);
+        $cuotas = DB::table('cuota_pago as c')->join('plan_pago as p', 'p.id_plan_pago', '=', 'c.plan_pago_id')->where('p.pedido_id', $pedido)->orderBy('numero')->get(['c.id_cuota_pago as id', 'c.monto']);
         $this->assertCount(3, $cuotas);
         $this->assertEquals(114.0, round($cuotas->sum('monto'), 2));
 
@@ -186,7 +186,7 @@ class FederTest extends TestCase
     public function test_control_de_concurrencia_optimista_en_lotes(): void
     {
         $this->como('feder.personal@example.com');
-        $lote = DB::table('lote')->where('codigo', 'ARR-001')->first();
+        $lote = DB::table('lote')->where('codigo', 'ARR-001')->first(['*', 'id_lote as id']);
         $datos = ['version' => $lote->version, 'estado' => 'disponible', 'costo_unitario' => 6.6];
 
         $this->putJson("/api/lotes/{$lote->id}", $datos)->assertOk();
@@ -196,10 +196,10 @@ class FederTest extends TestCase
     public function test_stock_insuficiente_y_flujo_de_estados(): void
     {
         $this->como('cliente.ana@example.com');
-        $cafe = DB::table('producto')->where('nombre', 'Café de Samaipata molido')->value('id');
+        $cafe = DB::table('producto')->where('nombre', 'Café de Samaipata molido')->value('id_producto');
         $this->postJson('/api/carrito/items', ['producto_id' => $cafe, 'cantidad' => 99999])->assertStatus(422);
 
-        $pedido = DB::table('pedido')->where('estado', 'confirmado')->value('id');
+        $pedido = DB::table('pedido')->where('estado', 'confirmado')->value('id_pedido');
         $this->como('feder.personal@example.com');
         $this->putJson("/api/pedidos/{$pedido}/estado", ['estado' => 'entregado'])->assertStatus(422);
         // Programar la entrega exige fecha y hora
@@ -207,21 +207,21 @@ class FederTest extends TestCase
             ->assertStatus(422)->assertJsonPath('errors.fecha_programada.0', 'Indique la fecha y hora aproximada de la entrega.');
         $cuando = now()->addDay()->setTime(15, 0)->format('Y-m-d H:i');
         $this->putJson("/api/pedidos/{$pedido}/estado", ['estado' => 'listo_entrega', 'fecha_programada' => $cuando])->assertOk();
-        $this->assertSame('listo_entrega', DB::table('pedido')->where('id', $pedido)->value('estado'));
+        $this->assertSame('listo_entrega', DB::table('pedido')->where('id_pedido', $pedido)->value('estado'));
         $this->assertDatabaseHas('movimiento_inventario', ['tipo' => 'salida', 'motivo' => "Pedido {$pedido}"]);
         $this->assertStringStartsWith($cuando, (string) DB::table('entrega')->where('pedido_id', $pedido)->value('fecha_programada'));
-        $this->assertStringContainsString('aprox. a las 15:00', DB::table('notificacion')->where('pedido_id', $pedido)->orderByDesc('id')->value('mensaje'));
+        $this->assertStringContainsString('aprox. a las 15:00', DB::table('notificacion')->where('pedido_id', $pedido)->orderByDesc('id_notificacion')->value('mensaje'));
     }
 
     public function test_imagen_de_producto_se_comprime_y_reemplaza(): void
     {
         Storage::fake('public');
         $this->como('feder.personal@example.com');
-        $p = DB::table('producto')->where('nombre', 'Miel de abeja pura')->first();
+        $p = DB::table('producto')->where('nombre', 'Miel de abeja pura')->first(['*', 'id_producto as id']);
         $datos = (array) collect($p)->only(['categoria_id', 'nombre', 'descripcion', 'presentacion', 'unidad_medida', 'precio_venta', 'modalidad_venta', 'stock_minimo', 'estado'])->all();
 
         $this->post("/api/productos/{$p->id}", $datos + ['imagen' => UploadedFile::fake()->image('miel.jpg', 3000, 2000)], ['Accept' => 'application/json'])->assertOk();
-        $primera = DB::table('producto')->where('id', $p->id)->value('imagen');
+        $primera = DB::table('producto')->where('id_producto', $p->id)->value('imagen');
         $this->assertStringEndsWith('.webp', $primera);
         Storage::disk('public')->assertExists($primera);
         [$ancho, $alto] = getimagesizefromstring(Storage::disk('public')->get($primera));
@@ -239,23 +239,23 @@ class FederTest extends TestCase
     public function test_productor_solo_cambia_la_foto_de_su_emprendimiento(): void
     {
         Storage::fake('public');
-        $suyo = DB::table('emprendimiento')->where('nombre', 'Arrocera Los Angeles')->value('id');
-        $ajeno = DB::table('emprendimiento')->where('nombre', 'Apícola Flor del Monte')->value('id');
+        $suyo = DB::table('emprendimiento')->where('nombre', 'Arrocera Los Angeles')->value('id_emprendimiento');
+        $ajeno = DB::table('emprendimiento')->where('nombre', 'Apícola Flor del Monte')->value('id_emprendimiento');
         $this->como('productor.pedro@example.com');
 
         $this->post("/api/emprendimientos/{$suyo}/imagen", ['imagen' => UploadedFile::fake()->image('campo.jpg', 1200, 900)], ['Accept' => 'application/json'])->assertOk();
-        Storage::disk('public')->assertExists(DB::table('emprendimiento')->where('id', $suyo)->value('imagen'));
+        Storage::disk('public')->assertExists(DB::table('emprendimiento')->where('id_emprendimiento', $suyo)->value('imagen'));
         $this->post("/api/emprendimientos/{$ajeno}/imagen", ['imagen' => UploadedFile::fake()->image('x.jpg')], ['Accept' => 'application/json'])->assertForbidden();
 
         // La foto se ve en la ficha pública del producto
-        $arroz = DB::table('producto')->where('nombre', 'Arroz grano de oro')->value('id');
+        $arroz = DB::table('producto')->where('nombre', 'Arroz grano de oro')->value('id_producto');
         $this->assertNotNull(collect($this->getJson("/api/catalogo/{$arroz}")->json('productores'))->firstWhere('id', $suyo)['imagen']);
     }
 
     public function test_envio_exige_ubicacion_y_cobra_segun_distancia(): void
     {
         $this->como('cliente.carlos@example.com');
-        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id');
+        $miel = DB::table('producto')->where('nombre', 'Miel de abeja pura')->value('id_producto');
         $base = ['tipo_entrega' => 'envio', 'direccion' => 'Av. Banzer 4to anillo'];
 
         $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 1])->assertOk();
@@ -267,14 +267,14 @@ class FederTest extends TestCase
 
         // Junto a FEDER: tarifa base
         $cerca = $this->postJson('/api/carrito/confirmar', $base + ['latitud' => -17.7800, 'longitud' => -63.1640])->assertCreated()->json('pedido_id');
-        $this->assertEquals(10.0, (float) DB::table('pedido')->where('id', $cerca)->value('costo_envio'));
+        $this->assertEquals(10.0, (float) DB::table('pedido')->where('id_pedido', $cerca)->value('costo_envio'));
         $this->assertDatabaseHas('entrega', ['pedido_id' => $cerca, 'latitud' => -17.78, 'longitud' => -63.164]);
 
         // A unos 6 km en línea recta: cuesta más
         $this->postJson('/api/carrito/items', ['producto_id' => $miel, 'cantidad' => 1])->assertOk();
         $lejos = $this->postJson('/api/carrito/confirmar', $base + ['latitud' => -17.7260, 'longitud' => -63.1640])->assertCreated()->json('pedido_id');
-        $en = DB::table('entrega')->where('pedido_id', $lejos)->first();
+        $en = DB::table('entrega')->where('pedido_id', $lejos)->first(['*', 'id_entrega as id']);
         $this->assertEqualsWithDelta(7.8, (float) $en->distancia_km, 0.2);
-        $this->assertEquals(24.5, (float) DB::table('pedido')->where('id', $lejos)->value('costo_envio'));
+        $this->assertEquals(24.5, (float) DB::table('pedido')->where('id_pedido', $lejos)->value('costo_envio'));
     }
 }

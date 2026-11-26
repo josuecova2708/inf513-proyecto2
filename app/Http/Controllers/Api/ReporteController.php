@@ -30,12 +30,12 @@ class ReporteController extends Controller
             'ventas' => [
                 'Ventas por producto',
                 ['producto' => 'Producto', 'categoria' => 'Categoría', 'cantidad' => 'Cantidad', 'pedidos' => 'Pedidos', 'monto' => 'Monto (Bs.)'],
-                $entre(DB::table('detalle_pedido as dp')->join('pedido as p', 'p.id', '=', 'dp.pedido_id')
-                    ->join('producto as pr', 'pr.id', '=', 'dp.producto_id')->join('categoria as c', 'c.id', '=', 'pr.categoria_id')
+                $entre(DB::table('detalle_pedido as dp')->join('pedido as p', 'p.id_pedido', '=', 'dp.pedido_id')
+                    ->join('producto as pr', 'pr.id_producto', '=', 'dp.producto_id')->join('categoria as c', 'c.id_categoria', '=', 'pr.categoria_id')
                     ->whereIn('p.estado', FinanzasController::VENDIDO), 'p.fecha')
                     ->groupBy('pr.nombre', 'c.nombre')->orderByDesc('monto')
                     ->get(['pr.nombre as producto', 'c.nombre as categoria', DB::raw('SUM(dp.cantidad) AS cantidad'),
-                        DB::raw('COUNT(DISTINCT p.id) AS pedidos'), DB::raw('SUM(dp.subtotal) AS monto')]),
+                        DB::raw('COUNT(DISTINCT p.id_pedido) AS pedidos'), DB::raw('SUM(dp.subtotal) AS monto')]),
                 ['tipo' => 'barras', 'x' => 'producto', 'y' => 'monto'],
             ],
             'inventario' => [
@@ -52,7 +52,7 @@ class ReporteController extends Controller
             'pedidos' => [
                 'Pedidos por estado y origen',
                 ['estado' => 'Estado', 'inmediato' => 'Venta inmediata', 'encargo' => 'Encargo', 'total' => 'Total', 'monto' => 'Monto (Bs.)'],
-                $entre(DB::table('pedido as p')->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id')), 'p.fecha')
+                $entre(DB::table('pedido as p')->whereExists(fn ($q) => $q->from('entrega as en')->whereColumn('en.pedido_id', 'p.id_pedido')), 'p.fecha')
                     ->groupBy('p.estado')->orderByDesc('total')
                     ->get(['p.estado', DB::raw("COUNT(*) FILTER (WHERE p.origen = 'inmediato') AS inmediato"),
                         DB::raw("COUNT(*) FILTER (WHERE p.origen = 'encargo') AS encargo"), DB::raw('COUNT(*) AS total'), DB::raw('SUM(p.total) AS monto')]),
@@ -61,16 +61,16 @@ class ReporteController extends Controller
             'encargos' => [
                 'Encargos: productos más encargados',
                 ['producto' => 'Producto', 'encargos' => 'Encargos', 'cantidad' => 'Cantidad', 'solicitados' => 'Solicitados', 'convertidos' => 'Convertidos'],
-                $entre(DB::table('detalle_encargo as de')->join('encargo as e', 'e.id', '=', 'de.encargo_id')->join('producto as p', 'p.id', '=', 'de.producto_id'), 'e.fecha_solicitud')
+                $entre(DB::table('detalle_encargo as de')->join('encargo as e', 'e.id_encargo', '=', 'de.encargo_id')->join('producto as p', 'p.id_producto', '=', 'de.producto_id'), 'e.fecha_solicitud')
                     ->groupBy('p.nombre')->orderByDesc('cantidad')
-                    ->get(['p.nombre as producto', DB::raw('COUNT(DISTINCT e.id) AS encargos'), DB::raw('SUM(de.cantidad) AS cantidad'),
+                    ->get(['p.nombre as producto', DB::raw('COUNT(DISTINCT e.id_encargo) AS encargos'), DB::raw('SUM(de.cantidad) AS cantidad'),
                         DB::raw("COUNT(*) FILTER (WHERE e.estado = 'solicitado') AS solicitados"), DB::raw("COUNT(*) FILTER (WHERE e.estado = 'convertido') AS convertidos")]),
                 ['tipo' => 'barras', 'x' => 'producto', 'y' => 'cantidad'],
             ],
             'metodos' => [
                 'Pagos por método y estado',
                 ['metodo' => 'Método', 'pagado' => 'Pagados', 'pendiente' => 'Pendientes', 'rechazado' => 'Rechazados', 'monto' => 'Monto cobrado (Bs.)'],
-                $entre(DB::table('pago as pa')->join('metodo_pago as mp', 'mp.id', '=', 'pa.metodo_pago_id'), 'pa.fecha')
+                $entre(DB::table('pago as pa')->join('metodo_pago as mp', 'mp.id_metodo_pago', '=', 'pa.metodo_pago_id'), 'pa.fecha')
                     ->groupBy('mp.nombre')->orderByDesc('monto')
                     ->get(['mp.nombre as metodo', DB::raw("COUNT(*) FILTER (WHERE pa.estado = 'pagado') AS pagado"),
                         DB::raw("COUNT(*) FILTER (WHERE pa.estado = 'pendiente') AS pendiente"), DB::raw("COUNT(*) FILTER (WHERE pa.estado = 'rechazado') AS rechazado"),
@@ -87,13 +87,13 @@ class ReporteController extends Controller
             'produccion' => [
                 'Producción por productor y comunidad',
                 ['emprendimiento' => 'Productor', 'comunidad' => 'Comunidad', 'producto' => 'Producto', 'reportada' => 'Reportada', 'validada' => 'Validada', 'en_lotes' => 'En lotes'],
-                $entre(DB::table('produccion as pr')->join('emprendimiento as e', 'e.id', '=', 'pr.emprendimiento_id')
-                    ->join('comunidad as c', 'c.id', '=', 'e.comunidad_id')->join('producto as p', 'p.id', '=', 'pr.producto_id'), 'pr.fecha_registro')
+                $entre(DB::table('produccion as pr')->join('emprendimiento as e', 'e.id_emprendimiento', '=', 'pr.emprendimiento_id')
+                    ->join('comunidad as c', 'c.id_comunidad', '=', 'e.comunidad_id')->join('producto as p', 'p.id_producto', '=', 'pr.producto_id'), 'pr.fecha_registro')
                     ->groupBy('e.nombre', 'c.nombre', 'p.nombre')->orderBy('e.nombre')
                     ->get(['e.nombre as emprendimiento', 'c.nombre as comunidad', 'p.nombre as producto',
                         DB::raw("COALESCE(SUM(pr.cantidad) FILTER (WHERE pr.estado = 'reportada'), 0) AS reportada"),
                         DB::raw("COALESCE(SUM(pr.cantidad) FILTER (WHERE pr.estado = 'validada'), 0) AS validada"),
-                        DB::raw('COALESCE(SUM((SELECT SUM(l.cantidad_inicial) FROM lote l WHERE l.produccion_id = pr.id)), 0) AS en_lotes')]),
+                        DB::raw('COALESCE(SUM((SELECT SUM(l.cantidad_inicial) FROM lote l WHERE l.produccion_id = pr.id_produccion)), 0) AS en_lotes')]),
                 ['tipo' => 'barras', 'x' => 'emprendimiento', 'y' => 'validada'],
             ],
         };

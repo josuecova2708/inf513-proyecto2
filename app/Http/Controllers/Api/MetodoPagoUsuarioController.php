@@ -20,12 +20,12 @@ class MetodoPagoUsuarioController extends Controller
     public function index(Request $request): JsonResponse
     {
         $u = $request->user();
-        $q = DB::table('metodo_pago_usuario as m')->join('metodo_pago as mp', 'mp.id', '=', 'm.metodo_pago_id')
-            ->join('usuario as u', 'u.id', '=', 'm.usuario_id')
+        $q = DB::table('metodo_pago_usuario as m')->join('metodo_pago as mp', 'mp.id_metodo_pago', '=', 'm.metodo_pago_id')
+            ->join('usuario as u', 'u.id_usuario', '=', 'm.usuario_id')
             ->when(! $u->esStaff() || ! $request->boolean('todos'), fn ($w) => $w->where('m.usuario_id', $u->id))
             ->when($request->boolean('activos'), fn ($w) => $w->where('m.estado', 'activo'))
-            ->orderByDesc('m.predeterminado')->orderByDesc('m.id')
-            ->get(['m.id', 'm.usuario_id', 'm.metodo_pago_id', 'mp.nombre as tipo', 'm.alias', 'm.titular', 'm.marca', 'm.ultimos4',
+            ->orderByDesc('m.predeterminado')->orderByDesc('m.id_metodo_pago_usuario')
+            ->get(['m.id_metodo_pago_usuario as id', 'm.usuario_id', 'm.metodo_pago_id', 'mp.nombre as tipo', 'm.alias', 'm.titular', 'm.marca', 'm.ultimos4',
                 'm.mes_venc', 'm.anio_venc', 'm.banco', 'm.predeterminado', 'm.estado', 'm.fecha_registro', 'm.proveedor',
                 DB::raw("u.nombre || ' ' || u.apellido AS usuario")]);
 
@@ -40,8 +40,8 @@ class MetodoPagoUsuarioController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $tarjetaId = DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id');
-        $transfId = DB::table('metodo_pago')->where('nombre', 'Transferencia')->value('id');
+        $tarjetaId = DB::table('metodo_pago')->where('nombre', 'Tarjeta')->value('id_metodo_pago');
+        $transfId = DB::table('metodo_pago')->where('nombre', 'Transferencia')->value('id_metodo_pago');
         if (StripeServicio::activo() && (int) $request->input('metodo_pago_id') === (int) $tarjetaId) {
             return $this->guardarTarjetaStripe($request, (int) $tarjetaId);
         }

@@ -22,16 +22,16 @@ class EntregaController extends Controller
         ]);
         $u = $request->user();
         $q = DB::table('entrega as en')
-            ->join('pedido as p', 'p.id', '=', 'en.pedido_id')
-            ->join('usuario as u', 'u.id', '=', 'p.cliente_id')
-            ->leftJoin('usuario as d', 'd.id', '=', 'en.despachado_por')
+            ->join('pedido as p', 'p.id_pedido', '=', 'en.pedido_id')
+            ->join('usuario as u', 'u.id_usuario', '=', 'p.cliente_id')
+            ->leftJoin('usuario as d', 'd.id_usuario', '=', 'en.personal_id')
             ->where('p.estado', '!=', 'pendiente')
             ->when(! $u->esStaff(), fn ($w) => $w->where('p.cliente_id', $u->id))
             ->when($f['estado'] ?? null, fn ($w, $e) => $w->where('en.estado', $e))
             ->when($f['tipo'] ?? null, fn ($w, $t) => $w->where('en.tipo', $t))
             ->orderByRaw("CASE en.estado WHEN 'pendiente' THEN 0 WHEN 'en_camino' THEN 1 ELSE 2 END")
-            ->orderByDesc('en.id')
-            ->select('en.*', 'p.numero', 'p.estado as estado_pedido', 'u.telefono',
+            ->orderByDesc('en.id_entrega')
+            ->select('en.*', 'en.id_entrega as id', 'p.numero', 'p.estado as estado_pedido', 'u.telefono',
                 DB::raw("u.nombre || ' ' || u.apellido AS cliente"), DB::raw("d.nombre || ' ' || d.apellido AS despachador"));
 
         return $this->paginado($q->paginate($this->porPagina($request)));
@@ -51,7 +51,7 @@ class EntregaController extends Controller
         $gestor = $request->user();
 
         $msg = DB::transaction(function () use ($d, $id, $gestor) {
-            $en = DB::table('entrega')->where('id', $id)->lockForUpdate()->first() ?? throw new ErrorNegocio('La entrega no existe.', 404);
+            $en = DB::table('entrega')->where('id_entrega', $id)->lockForUpdate()->first(['*', 'id_entrega as id']) ?? throw new ErrorNegocio('La entrega no existe.', 404);
             $p = PedidoServicio::pedidoPara($en->pedido_id, $gestor);
             if ($en->estado === 'entregada') {
                 throw new ErrorNegocio('La entrega ya fue completada y no puede modificarse.');
@@ -64,12 +64,12 @@ class EntregaController extends Controller
             if ($d['estado'] === 'en_camino' && $en->tipo === 'recojo') {
                 throw new ErrorNegocio('Las entregas por recojo en oficina no pasan por "en camino".');
             }
-            DB::table('entrega')->where('id', $id)->update(array_filter([
+            DB::table('entrega')->where('id_entrega', $id)->update(array_filter([
                 'estado' => $d['estado'],
                 'fecha_programada' => $d['fecha_programada'] ?? null,
                 'receptor' => $d['receptor'] ?? null,
                 'referencia' => $d['referencia'] ?? null,
-                'despachado_por' => $gestor->id,
+                'personal_id' => $gestor->id,
                 'fecha_entrega' => $d['estado'] === 'entregada' ? now() : null,
             ], fn ($v) => $v !== null));
 

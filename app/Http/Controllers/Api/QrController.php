@@ -13,9 +13,9 @@ class QrController extends Controller
 {
     public function index(): JsonResponse
     {
-        return response()->json(DB::table('qr_pago as q')->leftJoin('usuario as u', 'u.id', '=', 'q.subido_por')
-            ->orderByDesc('q.id')
-            ->get(['q.id', 'q.nombre_archivo', 'q.tipo_mime', 'q.fecha', 'q.activo', DB::raw("u.nombre || ' ' || u.apellido AS subido_por")]));
+        return response()->json(DB::table('qr_pago as q')->leftJoin('usuario as u', 'u.id_usuario', '=', 'q.usuario_id')
+            ->orderByDesc('q.id_qr_pago')
+            ->get(['q.id_qr_pago as id', 'q.nombre_archivo', 'q.tipo_mime', 'q.fecha', 'q.activo', DB::raw("u.nombre || ' ' || u.apellido AS subido_por")]));
     }
 
     public function store(Request $request): JsonResponse
@@ -24,7 +24,7 @@ class QrController extends Controller
         $f = $request->file('imagen');
         DB::transaction(function () use ($f, $request) {
             DB::table('qr_pago')->update(['activo' => false]);
-            DB::insert('INSERT INTO qr_pago (imagen, tipo_mime, nombre_archivo, subido_por) VALUES (decode(?, \'base64\'), ?, ?, ?)', [
+            DB::insert('INSERT INTO qr_pago (imagen, tipo_mime, nombre_archivo, usuario_id) VALUES (decode(?, \'base64\'), ?, ?, ?)', [
                 base64_encode(file_get_contents($f->getRealPath())), $f->getMimeType(), mb_substr($f->getClientOriginalName(), 0, 120), $request->user()->id,
             ]);
         });
@@ -35,7 +35,7 @@ class QrController extends Controller
     /** Imagen del QR activo. Si no hay uno cargado, devuelve un QR de demostración (SVG). */
     public function imagen(): Response
     {
-        $qr = DB::selectOne("SELECT encode(imagen, 'base64') AS b64, tipo_mime FROM qr_pago WHERE activo ORDER BY id DESC LIMIT 1");
+        $qr = DB::selectOne("SELECT encode(imagen, 'base64') AS b64, tipo_mime FROM qr_pago WHERE activo ORDER BY id_qr_pago DESC LIMIT 1");
         if ($qr) {
             return response(base64_decode($qr->b64), 200, ['Content-Type' => $qr->tipo_mime, 'Cache-Control' => 'no-cache']);
         }

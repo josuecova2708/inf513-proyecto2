@@ -17,6 +17,6 @@ class Entrega extends Modelo
 
     public function despachador(): BelongsTo
     {
-        return $this->belongsTo(Usuario::class, 'despachado_por');
+        return $this->belongsTo(Usuario::class, 'personal_id');
     }
 }

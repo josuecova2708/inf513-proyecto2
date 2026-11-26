@@ -20,9 +20,9 @@ class EmprendimientoController extends Controller
     private function reglas(?int $id = null): array
     {
         return [
-            'comunidad_id' => ['required', 'integer', 'exists:comunidad,id'],
-            'usuario_id' => ['nullable', 'integer', Rule::exists('usuario', 'id')->where(fn ($q) => $q->where('rol_id', DB::table('rol')->where('nombre', 'Productor')->value('id'))),
-                Rule::unique('emprendimiento', 'usuario_id')->ignore($id)],
+            'comunidad_id' => ['required', 'integer', 'exists:comunidad,id_comunidad'],
+            'usuario_id' => ['nullable', 'integer', Rule::exists('usuario', 'id_usuario')->where(fn ($q) => $q->where('rol_id', DB::table('rol')->where('nombre', 'Productor')->value('id_rol'))),
+                Rule::unique('emprendimiento', 'usuario_id')->ignore($id, 'id_emprendimiento')],
             'nombre' => ['required', 'string', 'min:3', 'max:120'],
             'rubro' => ['required', Rule::in(self::RUBROS)],
             'responsable' => ['required', 'string', 'min:3', 'max:120', 'regex:/^[\pL\s\'.-]+$/u'],
@@ -60,8 +60,8 @@ class EmprendimientoController extends Controller
         ]);
         $u = $request->user();
         $q = DB::table('emprendimiento as e')
-            ->join('comunidad as c', 'c.id', '=', 'e.comunidad_id')
-            ->leftJoin('usuario as u', 'u.id', '=', 'e.usuario_id')
+            ->join('comunidad as c', 'c.id_comunidad', '=', 'e.comunidad_id')
+            ->leftJoin('usuario as u', 'u.id_usuario', '=', 'e.usuario_id')
             ->when(! $u->esStaff(), fn ($w) => $w->where('e.usuario_id', $u->id))
             ->when($f['q'] ?? null, fn ($w, $t) => $w->where(fn ($x) => $x->where('e.nombre', 'ilike', $this->like($t))
                 ->orWhere('e.responsable', 'ilike', $this->like($t))->orWhere('c.nombre', 'ilike', $this->like($t))))
@@ -69,8 +69,8 @@ class EmprendimientoController extends Controller
             ->when($f['rubro'] ?? null, fn ($w, $r) => $w->where('e.rubro', $r))
             ->when($f['estado'] ?? null, fn ($w, $s) => $w->where('e.estado', $s))
             ->orderBy('e.nombre')
-            ->select('e.*', 'c.nombre as comunidad', 'c.municipio', 'u.email as cuenta_email',
-                DB::raw('(SELECT COUNT(*) FROM emprendimiento_producto ep WHERE ep.emprendimiento_id = e.id) AS productos'));
+            ->select('e.*', 'e.id_emprendimiento as id', 'c.nombre as comunidad', 'c.municipio', 'u.email as cuenta_email',
+                DB::raw('(SELECT COUNT(*) FROM emprendimiento_producto ep WHERE ep.emprendimiento_id = e.id_emprendimiento) AS productos'));
 
         if ($request->boolean('todos')) {
             return response()->json($q->get());
@@ -81,14 +81,14 @@ class EmprendimientoController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $e = Emprendimiento::with(['comunidad', 'usuario:id,nombre,apellido,email'])->findOrFail($id);
+        $e = Emprendimiento::with(['comunidad', 'usuario:id_usuario,nombre,apellido,email'])->findOrFail($id);
         $this->verificarAcceso($request->user(), $e);
-        $ofertas = DB::table('emprendimiento_producto as ep')->join('producto as p', 'p.id', '=', 'ep.producto_id')
+        $ofertas = DB::table('emprendimiento_producto as ep')->join('producto as p', 'p.id_producto', '=', 'ep.producto_id')
             ->where('ep.emprendimiento_id', $id)->orderBy('p.nombre')
-            ->get(['p.id as producto_id', 'p.nombre', 'p.unidad_medida', 'p.precio_venta', 'ep.precio_referencia', 'ep.temporada']);
-        $produccion = DB::table('produccion as pr')->join('producto as p', 'p.id', '=', 'pr.producto_id')
-            ->where('pr.emprendimiento_id', $id)->orderByDesc('pr.id')->limit(10)
-            ->get(['pr.id', 'p.nombre as producto', 'pr.tipo', 'pr.cantidad', 'pr.unidad_medida', 'pr.estado', 'pr.fecha_registro']);
+            ->get(['p.id_producto as producto_id', 'p.nombre', 'p.unidad_medida', 'p.precio_venta', 'ep.precio_referencia', 'ep.temporada']);
+        $produccion = DB::table('produccion as pr')->join('producto as p', 'p.id_producto', '=', 'pr.producto_id')
+            ->where('pr.emprendimiento_id', $id)->orderByDesc('pr.id_produccion')->limit(10)
+            ->get(['pr.id_produccion as id', 'p.nombre as producto', 'pr.tipo', 'pr.cantidad', 'pr.unidad_medida', 'pr.estado', 'pr.fecha_registro']);
 
         return response()->json(['emprendimiento' => $e, 'ofertas' => $ofertas, 'produccion' => $produccion]);
     }
@@ -160,7 +160,7 @@ class EmprendimientoController extends Controller
         $e = Emprendimiento::findOrFail($id);
         $this->verificarAcceso($request->user(), $e);
         $d = $request->validate([
-            'producto_id' => ['required', 'integer', 'exists:producto,id'],
+            'producto_id' => ['required', 'integer', 'exists:producto,id_producto'],
             'precio_referencia' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'temporada' => ['nullable', 'string', 'max:50'],
         ]);

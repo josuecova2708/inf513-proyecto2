@@ -17,7 +17,7 @@ class ComunidadController extends Controller
     {
         return [
             'nombre' => ['required', 'string', 'min:3', 'max:100',
-                Rule::unique('comunidad', 'nombre')->where(fn ($q) => $q->where('municipio', request('municipio')))->ignore($id)],
+                Rule::unique('comunidad', 'nombre')->where(fn ($q) => $q->where('municipio', request('municipio')))->ignore($id, 'id_comunidad')],
             'municipio' => ['required', 'string', 'min:3', 'max:80'],
             'provincia' => ['nullable', 'string', 'max:80'],
             'departamento' => ['required', 'string', 'max:50'],
@@ -31,11 +31,11 @@ class ComunidadController extends Controller
     {
         $request->validate(['q' => ['nullable', 'string', 'max:80']]);
         $q = DB::table('comunidad as c')
-            ->leftJoin('emprendimiento as e', 'e.comunidad_id', '=', 'c.id')
+            ->leftJoin('emprendimiento as e', 'e.comunidad_id', '=', 'c.id_comunidad')
             ->when($request->q, fn ($w, $t) => $w->where(fn ($x) => $x->where('c.nombre', 'ilike', $this->like($t))
                 ->orWhere('c.municipio', 'ilike', $this->like($t))->orWhere('c.provincia', 'ilike', $this->like($t))))
-            ->groupBy('c.id')->orderBy('c.nombre')
-            ->select('c.*', DB::raw('COUNT(e.id) AS productores'));
+            ->groupBy('c.id_comunidad')->orderBy('c.nombre')
+            ->select('c.*', 'c.id_comunidad as id', DB::raw('COUNT(e.id_emprendimiento) AS productores'));
 
         if ($request->boolean('todos')) {
             return response()->json($q->get());

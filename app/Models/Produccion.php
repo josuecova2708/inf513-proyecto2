@@ -23,7 +23,7 @@ class Produccion extends Modelo
 
     public function validador(): BelongsTo
     {
-        return $this->belongsTo(Usuario::class, 'validado_por');
+        return $this->belongsTo(Usuario::class, 'validador_id');
     }
 
     public function lotes(): HasMany

@@ -16,15 +16,15 @@ class CategoriaController extends Controller
     public function index(Request $request): JsonResponse
     {
         return response()->json(DB::table('categoria as c')
-            ->leftJoin('producto as p', 'p.categoria_id', '=', 'c.id')
-            ->groupBy('c.id')->orderBy('c.nombre')
-            ->get(['c.*', DB::raw('COUNT(p.id) AS productos')]));
+            ->leftJoin('producto as p', 'p.categoria_id', '=', 'c.id_categoria')
+            ->groupBy('c.id_categoria')->orderBy('c.nombre')
+            ->get(['c.*', 'c.id_categoria as id', DB::raw('COUNT(p.id_producto) AS productos')]));
     }
 
     private function reglas(?int $id = null): array
     {
         return [
-            'nombre' => ['required', 'string', 'min:3', 'max:80', Rule::unique('categoria', 'nombre')->ignore($id)],
+            'nombre' => ['required', 'string', 'min:3', 'max:80', Rule::unique('categoria', 'nombre')->ignore($id, 'id_categoria')],
             'descripcion' => ['nullable', 'string', 'max:200'],
         ];
     }
