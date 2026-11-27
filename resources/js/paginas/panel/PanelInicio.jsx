@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Banknote, Boxes, CalendarClock, ClipboardList, PackageCheck, Receipt, ShoppingBag, Truck, Wheat } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Banknote, Boxes, CalendarClock, ClipboardList, MapPinned, PackageCheck, Receipt, ShieldCheck, ShoppingBag, Truck, Wheat } from 'lucide-react';
 import api from '../../api/cliente';
 import { Cargando, Encabezado, Estado, Metrica, Tarjeta, Vacio } from '../../componentes/ui';
 import { useAuth } from '../../contextos/AuthContext';
@@ -35,26 +35,32 @@ export default function PanelInicio() {
                         <Acceso to="/panel/encargos" icono={ClipboardList} titulo="Encargos activos" valor={r.encargos_activos} color="info" />
                         <Acceso to="/panel/planes" icono={CalendarClock} titulo="Cuotas por pagar" valor={r.cuotas_pendientes} color="acento" />
                     </div>
-                    <Tarjeta titulo="Mis últimos pedidos" acciones={<Link to="/catalogo" className="btn-primario btn-sm"><ShoppingBag className="size-4" /> Ir a la tienda</Link>}>
-                        {r.ultimos_pedidos?.length ? (
-                            <div className="overflow-x-auto">
-                                <table className="tabla">
-                                    <thead><tr><th>Pedido</th><th>Fecha</th><th>Estado</th><th className="text-right">Total</th><th className="text-right">Saldo</th></tr></thead>
-                                    <tbody>
-                                        {r.ultimos_pedidos.map((p) => (
-                                            <tr key={p.id}>
-                                                <td><Link className="font-medium text-primario hover:underline" to={`/panel/pedidos/${p.id}`}>{p.numero}</Link></td>
-                                                <td>{fecha(p.fecha)}</td>
-                                                <td><Estado valor={p.estado} /></td>
-                                                <td className="text-right">{moneda(p.total)}</td>
-                                                <td className="text-right">{moneda(p.saldo_pendiente)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    <div className="tarjeta relative overflow-hidden bg-gradient-to-br from-primario/15 via-superficie to-acento/10 p-6 sm:p-8">
+                        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+                            <div className="max-w-xl space-y-2">
+                                <span className="insignia bg-primario/15 text-primario">
+                                    <Wheat className="size-3.5" aria-hidden="true" /> Directo de nuestras comunidades
+                                </span>
+                                <h2 className="text-2xl font-bold sm:text-3xl">Explora el catálogo de productos frescos</h2>
+                                <p className="text-suave">
+                                    Descubre granos, café, miel, hortalizas y productos de temporada cultivados por productores locales con trazabilidad de origen garantizada.
+                                </p>
+                                <div className="flex flex-wrap gap-4 pt-2 text-xs text-suave">
+                                    <span className="inline-flex items-center gap-1.5"><MapPinned className="size-4 text-primario" aria-hidden="true" /> Comunidades agrícolas de Santa Cruz</span>
+                                    <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-4 text-primario" aria-hidden="true" /> Trazabilidad por lote</span>
+                                    <span className="inline-flex items-center gap-1.5"><Truck className="size-4 text-primario" aria-hidden="true" /> Recojo en FEDER o envío a domicilio</span>
+                                </div>
                             </div>
-                        ) : <Vacio texto="Aún no tienes pedidos. ¡Visita la tienda!" />}
-                    </Tarjeta>
+                            <div className="flex shrink-0 flex-wrap items-center gap-3">
+                                <Link to="/catalogo" className="btn-primario px-5 py-2.5">
+                                    <ShoppingBag className="size-5" aria-hidden="true" /> Ver catálogo <ArrowRight className="size-4" aria-hidden="true" />
+                                </Link>
+                                <Link to="/panel/pedidos" className="btn-secundario">
+                                    <Receipt className="size-4" aria-hidden="true" /> Ver mis pedidos
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             ) : usuario?.rol === 'Productor' ? (
                 <div className="space-y-6">
