@@ -36,7 +36,35 @@ export const registrarExpiracion = (fn) => (alExpirarSesion = fn);
 api.interceptors.response.use(
     (r) => r,
     (error) => {
-        if (error.response?.status === 401 && tokenGuardado() && !error.config?.url?.includes('auth/login')) {
+        const metodo = (error.config?.method ?? 'GET').toUpperCase();
+        const url = error.config?.url ?? '(ruta desconocida)';
+        const status = error.response?.status;
+        const data = error.response?.data;
+
+        if (!error.response) {
+            console.error(`[AUDITORÍA FEDER · RED/SERVIDOR CAÍDO] ${metodo} ${url}`, {
+                codigo: error.code,
+                mensaje: error.message,
+                sugerencia: 'Verifique que php artisan serve y el servicio PostgreSQL estén activos.',
+            });
+        } else {
+            const etiqueta = data?.codigo_error
+                ? `BD ${data.codigo_error}`
+                : status >= 500
+                  ? 'SERVIDOR/BD 500'
+                  : `HTTP ${status}`;
+            const fn = status >= 500 || data?.codigo_error ? console.error : console.warn;
+            fn(`[AUDITORÍA FEDER · ${etiqueta}] ${metodo} ${url}`, {
+                status,
+                codigo_error: data?.codigo_error ?? null,
+                mensaje: data?.message ?? error.message,
+                detalle_tecnico: data?.detalle_tecnico ?? data?.exception ?? null,
+                errores_validacion: data?.errors ?? null,
+                parametros: error.config?.params ?? null,
+            });
+        }
+
+        if (status === 401 && tokenGuardado() && !error.config?.url?.includes('auth/login')) {
             guardarToken(null);
             alExpirarSesion?.();
         }

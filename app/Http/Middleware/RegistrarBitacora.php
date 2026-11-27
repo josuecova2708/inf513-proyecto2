@@ -38,11 +38,19 @@ class RegistrarBitacora
         $segmentos = explode('/', $request->path());
         $recurso = $segmentos[1] ?? 'api';
 
+        $detalle = null;
+        if ($codigo >= 400) {
+            $json = json_decode((string) $response->getContent(), true);
+            $msg = $json['detalle_tecnico'] ?? $json['message'] ?? null;
+            $cod = $json['codigo_error'] ?? null;
+            $detalle = 'HTTP '.$codigo.($cod ? " [{$cod}]" : '').($msg ? ': '.$msg : '');
+        }
+
         BitacoraServicio::registrar(
             $accion,
             $usuario?->id,
             $recurso,
-            $codigo >= 400 ? 'HTTP '.$codigo : null,
+            $detalle,
             $request,
             $codigo,
             $usuario?->email,
