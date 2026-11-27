@@ -6,6 +6,7 @@
 .env.tecnoweb
 .phpactor.json
 .phpunit.result.cache
+/.htaccess
 /.codex
 /.cursor/
 /.idea
@@ -27,3 +28,4 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 
+*.eapx
