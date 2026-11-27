@@ -173,17 +173,33 @@ docs/                       Matriz de acceso y catálogo de endpoints
 
 ## Despliegue en tecnoweb
 
-Se despliega en la terminal de Cockpit del servidor, dentro de `/home/grupo28sa/proyecto2/`:
+Se despliega por SSH desde PowerShell. Apache publica `/home/grupo28sa` como `/inf513/grupo28sa`, así que la carpeta
+`/home/grupo28sa/proyecto2/` es la URL **https://www.tecnoweb.org.bo/inf513/grupo28sa/proyecto2**.
+
+**Primera vez:**
 
 ```bash
-git clone https://github.com/<cuenta>/inf513-proyecto2.git
+ssh grupo28sa@www.tecnoweb.org.bo
+
+ls -la ~/proyecto2 2>/dev/null || echo "proyecto2 no existe"   # revisar que esté vacía o no exista
+mkdir -p ~/proyecto2 && cd ~/proyecto2
+git clone https://github.com/josuecova2708/inf513-proyecto2.git
 cd inf513-proyecto2
-bash deploy/desplegar.sh   # la primera vez crea el .env: completa DB_PASSWORD y vuelve a ejecutarlo
+bash deploy/desplegar.sh                    # crea el .env y se detiene
+nano .env                                   # completar DB_PASSWORD (y claves de Stripe si se usa)
+bash deploy/desplegar.sh --reiniciar-datos  # borra las tablas viejas y carga los datos demo
 ```
 
-El script hace todo el resto:
+**Actualizaciones:** `git push` desde la PC y luego, por SSH:
 
-- instala las dependencias y compila React;
-- ejecuta las migraciones;
-- crea los enlaces simbólicos de `public/`;
-- deja la web en **https://www.tecnoweb.org.bo/inf513/grupo28sa/proyecto2**.
+```bash
+cd ~/proyecto2/inf513-proyecto2 && bash deploy/desplegar.sh
+```
+
+El script:
+
+- bloquea el acceso web a la carpeta del repositorio (`.htaccess` con `Require all denied`) y deja el `.env`
+  legible solo por el dueño, porque todo `/home/grupo28sa` es público;
+- instala las dependencias, compila React y ejecuta las migraciones;
+- copia el `.htaccess` de producción y crea los enlaces simbólicos de `public/` en `proyecto2/`;
+- al final muestra los `curl.exe` para comprobar desde la PC que la web responde y que el `.env` da 403.
