@@ -10,6 +10,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -60,22 +61,57 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        // Errores de PostgreSQL -> mensajes en español para el usuario
+        // Errores de PostgreSQL -> log de auditoría en servidor/consola + mensajes en español para el usuario
         $exceptions->render(function (QueryException $e, Request $request) use ($esApi) {
             if (! $esApi($request)) {
                 return null;
             }
-            $estado = $e->errorInfo[0] ?? $e->getCode();
-            $detalle = $e->errorInfo[2] ?? '';
+            $estado = (string) ($e->errorInfo[0] ?? $e->getCode());
+            $detalle = $e->errorInfo[2] ?? $e->getMessage();
+            $usuario = $request->user() ?? auth('sanctum')->user();
 
-            return match ((string) $estado) {
+            Log::error('[AUDITORIA-BD] Fallo en consulta PostgreSQL', [
+                'sqlstate' => $estado,
+                'detalle_pg' => $detalle,
+                'sql' => $e->getSql(),
+                'bindings' => $e->getBindings(),
+                'metodo' => $request->method(),
+                'ruta' => '/'.ltrim($request->path(), '/'),
+                'usuario_id' => $usuario?->id,
+                'email' => $usuario?->email,
+                'ip' => $request->ip(),
+            ]);
+
+            $codigoDiag = "PG-{$estado}";
+            $limpio = trim(preg_replace('/^ERROR:\s*|\s*CONTEXT:.*$/s', '', $detalle));
+
+            return match ($estado) {
                 // RAISE EXCEPTION de las funciones plpgsql (stock insuficiente, producción no validada...)
-                'P0001' => response()->json(['message' => trim(preg_replace('/^ERROR:\s*|\s*CONTEXT:.*$/s', '', $detalle))], 409),
-                '23505' => response()->json(['message' => 'Ya existe un registro con esos datos (valor duplicado).'], 422),
-                '23503' => response()->json(['message' => 'No se puede completar la operación: el registro está relacionado con otros datos.'], 409),
-                '23514' => response()->json(['message' => 'Los datos no cumplen las reglas del sistema (valor fuera de rango o estado inválido).'], 422),
-                '40001', '40P01' => response()->json(['message' => 'Otro usuario modificó estos datos al mismo tiempo. Intente nuevamente.'], 409),
-                default => null,
+                'P0001' => response()->json(['message' => $limpio, 'codigo_error' => $codigoDiag, 'detalle_tecnico' => $limpio], 409),
+                '23505' => response()->json(['message' => 'Ya existe un registro con esos datos (valor duplicado).', 'codigo_error' => $codigoDiag, 'detalle_tecnico' => $limpio], 422),
+                '23503' => response()->json(['message' => 'No se puede completar la operación: el registro está relacionado con otros datos.', 'codigo_error' => $codigoDiag, 'detalle_tecnico' => $limpio], 409),
+                '23514' => response()->json(['message' => 'Los datos no cumplen las reglas del sistema (valor fuera de rango o estado inválido).', 'codigo_error' => $codigoDiag, 'detalle_tecnico' => $limpio], 422),
+                '40001', '40P01' => response()->json(['message' => 'Otro usuario modificó estos datos al mismo tiempo. Intente nuevamente.', 'codigo_error' => $codigoDiag, 'detalle_tecnico' => $limpio], 409),
+                default => response()->json([
+                    'message' => 'Error de base de datos al procesar la solicitud.',
+                    'codigo_error' => $codigoDiag,
+                    'detalle_tecnico' => config('app.debug') ? $limpio : 'Consulte la bitácora o los logs del servidor.',
+                ], 500),
             };
+        });
+
+        // Cualquier otro error no controlado (PDOException de conexión caída, errores 500...)
+        $exceptions->report(function (Throwable $e) {
+            $req = request();
+            $usuario = $req?->user() ?? auth('sanctum')->user();
+            Log::error('[AUDITORIA-SERVIDOR] Excepción en el servidor: '.$e->getMessage(), [
+                'excepcion' => get_class($e),
+                'archivo' => $e->getFile().':'.$e->getLine(),
+                'metodo' => $req?->method(),
+                'ruta' => $req ? '/'.ltrim($req->path(), '/') : null,
+                'usuario_id' => $usuario?->id,
+                'email' => $usuario?->email,
+                'ip' => $req?->ip(),
+            ]);
         });
     })->create();

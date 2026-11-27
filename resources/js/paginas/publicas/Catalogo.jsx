@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { SlidersHorizontal } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, SlidersHorizontal } from 'lucide-react';
 import api from '../../api/cliente';
 import ProductoTarjeta, { useAgregarAlCarrito } from '../../componentes/ProductoTarjeta';
 import { Alerta, Cargando, Paginacion, Vacio } from '../../componentes/ui';
+import { useAuth } from '../../contextos/AuthContext';
 
 export default function Catalogo() {
+    const { autenticado } = useAuth();
     const [params, setParams] = useSearchParams();
     const [categorias, setCategorias] = useState([]);
     const [resultado, setResultado] = useState(null);
@@ -38,6 +40,11 @@ export default function Catalogo() {
 
     return (
         <div className="mx-auto max-w-7xl px-4 py-8">
+            {autenticado && (
+                <Link to="/panel" className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-primario hover:underline">
+                    <ArrowLeft className="size-4" aria-hidden="true" /> Volver al panel
+                </Link>
+            )}
             <h1 className="text-3xl font-bold">Catálogo de productos</h1>
             <p className="mt-1 text-suave">{q ? <>Resultados para “<strong>{q}</strong>”</> : 'Productos de las comunidades agrícolas de FEDER'}</p>
 

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -37,8 +38,15 @@ class BitacoraServicio
                 'fecha' => now(),
             ]);
         } catch (Throwable $e) {
-            // La auditoría nunca debe romper la petición del usuario
-            report($e);
+            // La auditoría nunca debe romper la petición del usuario, pero sí deja traza en consola/logs
+            Log::critical('[AUDITORIA-BITACORA] No se pudo escribir en la tabla bitacora de PostgreSQL', [
+                'error' => $e->getMessage(),
+                'accion' => $accion,
+                'recurso' => $recurso,
+                'ruta' => $request->path(),
+                'codigo_http' => $codigoHttp,
+                'usuario_id' => $usuarioId,
+            ]);
         }
     }
 }

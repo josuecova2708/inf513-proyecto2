@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LoaderCircle, MapPin, Minus, Plus, ShoppingBag, Store, Trash2, Truck } from 'lucide-react';
+import { ArrowLeft, LoaderCircle, MapPin, Minus, Plus, ShoppingBag, Store, Trash2, Truck } from 'lucide-react';
 import api, { erroresCampos, mensajeError } from '../../api/cliente';
 import { ImagenProducto } from '../../componentes/ProductoTarjeta';
 import { Alerta, Cargando, Vacio } from '../../componentes/ui';
@@ -82,6 +82,15 @@ export default function Carrito() {
 
     return (
         <div className="mx-auto max-w-6xl px-4 py-8">
+            <div className="mb-3 flex flex-wrap items-center gap-4 text-sm font-medium text-primario">
+                <Link to="/panel" className="inline-flex items-center gap-1.5 hover:underline">
+                    <ArrowLeft className="size-4" aria-hidden="true" /> Volver al panel
+                </Link>
+                <span className="text-borde" aria-hidden="true">·</span>
+                <Link to="/catalogo" className="inline-flex items-center gap-1.5 hover:underline">
+                    <ShoppingBag className="size-4" aria-hidden="true" /> Seguir comprando
+                </Link>
+            </div>
             <h1 className="mb-6 text-3xl font-bold">Mi carrito</h1>
             <div className="mb-4"><Alerta tipo="error" onCerrar={() => setError('')}>{error}</Alerta></div>
             {!carrito.detalles.length ? (
